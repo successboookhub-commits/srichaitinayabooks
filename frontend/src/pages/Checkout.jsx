@@ -261,12 +261,12 @@ export default function Checkout() {
   };
 
   return (
-    <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-8">
+    <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-6 sm:py-8 pb-32 sm:pb-12">
       
       <div className="mb-6 flex items-center justify-between">
         <button
           onClick={() => navigate(-1)}
-          className="text-xs font-bold text-gray-500 hover:text-gray-900 flex items-center gap-1.5"
+          className="text-xs font-bold text-gray-500 hover:text-gray-900 flex items-center gap-1.5 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Store</span>
@@ -277,11 +277,11 @@ export default function Checkout() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
         
         {/* Address Form */}
         <div className="lg:col-span-7 space-y-6">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-100 shadow-xs space-y-6">
+          <div className="bg-white rounded-3xl p-5 sm:p-8 border border-gray-100 shadow-xs space-y-6">
             <h2 className="text-xl font-extrabold text-gray-900">Delivery Information</h2>
 
             {errorMessage && (
@@ -302,7 +302,7 @@ export default function Checkout() {
                     value={formData.name}
                     onChange={handleChange}
                     placeholder="Student / Parent Name"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-600"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 sm:py-2.5 text-sm sm:text-xs focus:outline-none focus:border-blue-600 focus:bg-white transition-colors"
                   />
                 </div>
                 <div>
@@ -333,12 +333,12 @@ export default function Checkout() {
                       }
                     }}
                     placeholder="10-digit mobile number"
-                    className={`w-full bg-gray-50 border rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none transition-all ${
+                    className={`w-full bg-gray-50 border rounded-xl px-4 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold focus:outline-none transition-all ${
                       formData.phone.length === 10
-                        ? 'border-emerald-500 bg-emerald-50/20 text-gray-900 focus:border-emerald-600'
+                        ? 'border-emerald-500 bg-emerald-50/20 text-gray-900 focus:border-emerald-600 focus:bg-white'
                         : formData.phone.length > 0
-                        ? 'border-amber-400 focus:border-amber-500'
-                        : 'border-gray-200 focus:border-blue-600'
+                        ? 'border-amber-400 focus:border-amber-500 focus:bg-white'
+                        : 'border-gray-200 focus:border-blue-600 focus:bg-white'
                     }`}
                   />
                 </div>
@@ -352,7 +352,7 @@ export default function Checkout() {
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="Optional email for receipt"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-600"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 sm:py-2.5 text-sm sm:text-xs focus:outline-none focus:border-blue-600 focus:bg-white transition-colors"
                 />
               </div>
 
@@ -366,7 +366,7 @@ export default function Checkout() {
                     value={formData.door_no}
                     onChange={handleChange}
                     placeholder="e.g. 4-12/A, Flat 201"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-600"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 sm:py-2.5 text-sm sm:text-xs focus:outline-none focus:border-blue-600 focus:bg-white transition-colors"
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -378,7 +378,7 @@ export default function Checkout() {
                     value={formData.address}
                     onChange={handleChange}
                     placeholder="Street, Landmark, Area name"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-600"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 sm:py-2.5 text-sm sm:text-xs focus:outline-none focus:border-blue-600 focus:bg-white transition-colors"
                   />
                 </div>
               </div>
@@ -392,7 +392,7 @@ export default function Checkout() {
                     value={formData.mandal}
                     onChange={handleChange}
                     placeholder="Mandal"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-600"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 sm:py-2.5 text-sm sm:text-xs focus:outline-none focus:border-blue-600 focus:bg-white transition-colors"
                   />
                 </div>
                 <div>
@@ -404,7 +404,7 @@ export default function Checkout() {
                     value={formData.district}
                     onChange={handleChange}
                     placeholder="District"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-600"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 sm:py-2.5 text-sm sm:text-xs focus:outline-none focus:border-blue-600 focus:bg-white transition-colors"
                   />
                 </div>
                 <div>
@@ -416,7 +416,7 @@ export default function Checkout() {
                     value={formData.state}
                     onChange={handleChange}
                     placeholder="State"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-600"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 sm:py-2.5 text-sm sm:text-xs focus:outline-none focus:border-blue-600 focus:bg-white transition-colors"
                   />
                 </div>
                 <div>
@@ -447,12 +447,12 @@ export default function Checkout() {
                       }
                     }}
                     placeholder="6 digits"
-                    className={`w-full bg-gray-50 border rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none transition-all ${
+                    className={`w-full bg-gray-50 border rounded-xl px-4 py-3 sm:py-2.5 text-sm sm:text-xs font-semibold focus:outline-none transition-all ${
                       formData.pincode.length === 6
-                        ? 'border-emerald-500 bg-emerald-50/20 text-gray-900 focus:border-emerald-600'
+                        ? 'border-emerald-500 bg-emerald-50/20 text-gray-900 focus:border-emerald-600 focus:bg-white'
                         : formData.pincode.length > 0
-                        ? 'border-amber-400 focus:border-amber-500'
-                        : 'border-gray-200 focus:border-blue-600'
+                        ? 'border-amber-400 focus:border-amber-500 focus:bg-white'
+                        : 'border-gray-200 focus:border-blue-600 focus:bg-white'
                     }`}
                   />
                 </div>

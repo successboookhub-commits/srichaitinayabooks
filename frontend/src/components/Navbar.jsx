@@ -553,58 +553,60 @@ export default function Navbar() {
       )}
 
       {/* ================= STICKY MOBILE BOTTOM NAV ================= */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] flex items-center justify-around h-14">
-        {/* 1. Home */}
-        <Link
-          to="/"
-          className={`flex-1 flex flex-col items-center justify-center py-1 transition-colors ${
-            location.pathname === '/' ? 'text-red-600 font-extrabold' : 'text-slate-500 font-medium'
-          }`}
-        >
-          <HomeIcon className="w-5 h-5 mb-0.5" />
-          <span className="text-[10.5px]">Home</span>
-        </Link>
+      {!location.pathname.startsWith('/admin') && location.pathname !== '/checkout' && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] flex items-center justify-around h-14">
+          {/* 1. Home */}
+          <Link
+            to="/"
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-colors ${
+              location.pathname === '/' ? 'text-red-600 font-extrabold' : 'text-slate-500 font-medium'
+            }`}
+          >
+            <HomeIcon className="w-5 h-5 mb-0.5" />
+            <span className="text-[10.5px]">Home</span>
+          </Link>
 
-        {/* 2. Shop */}
-        <Link
-          to="/shop"
-          className={`flex-1 flex flex-col items-center justify-center py-1 transition-colors ${
-            location.pathname.startsWith('/shop') ? 'text-red-600 font-extrabold' : 'text-slate-500 font-medium'
-          }`}
-        >
-          <BookOpen className="w-5 h-5 mb-0.5" />
-          <span className="text-[10.5px]">Shop</span>
-        </Link>
+          {/* 2. Shop */}
+          <Link
+            to="/shop"
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-colors ${
+              location.pathname.startsWith('/shop') ? 'text-red-600 font-extrabold' : 'text-slate-500 font-medium'
+            }`}
+          >
+            <BookOpen className="w-5 h-5 mb-0.5" />
+            <span className="text-[10.5px]">Shop</span>
+          </Link>
 
-        {/* 3. Account / History */}
-        <Link
-          to="/order-history"
-          className={`flex-1 flex flex-col items-center justify-center py-1 transition-colors ${
-            location.pathname.startsWith('/order-history') ? 'text-red-600 font-extrabold' : 'text-slate-500 font-medium'
-          }`}
-        >
-          <User className="w-5 h-5 mb-0.5" />
-          <span className="text-[10.5px]">Orders</span>
-        </Link>
+          {/* 3. Account / History */}
+          <Link
+            to="/order-history"
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-colors ${
+              location.pathname.startsWith('/order-history') ? 'text-red-600 font-extrabold' : 'text-slate-500 font-medium'
+            }`}
+          >
+            <User className="w-5 h-5 mb-0.5" />
+            <span className="text-[10.5px]">Orders</span>
+          </Link>
 
-        {/* 4. Cart */}
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className={`flex-1 flex flex-col items-center justify-center py-1 transition-colors relative cursor-pointer ${
-            cartCount > 0 ? 'text-red-600 font-extrabold' : 'text-slate-500 font-medium'
-          }`}
-        >
-          <div className="relative">
-            <ShoppingBag className="w-5 h-5 mb-0.5" />
-            {cartCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 bg-red-600 text-white text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs border border-white">
-                {cartCount}
-              </span>
-            )}
-          </div>
-          <span className="text-[10.5px]">Cart</span>
-        </button>
-      </nav>
+          {/* 4. Cart */}
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className={`flex-1 flex flex-col items-center justify-center py-1 transition-colors relative cursor-pointer ${
+              cartCount > 0 ? 'text-red-600 font-extrabold' : 'text-slate-500 font-medium'
+            }`}
+          >
+            <div className="relative">
+              <ShoppingBag className="w-5 h-5 mb-0.5" />
+              {cartCount > 0 && (
+                <span className="absolute -top-1.5 -right-2 bg-red-600 text-white text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs border border-white">
+                  {cartCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[10.5px]">Cart</span>
+          </button>
+        </nav>
+      )}
 
       {/* ================= FULL-SCREEN NATIVE MOBILE & TABLET SEARCH VIEW ================= */}
       {isSearchModalOpen && (

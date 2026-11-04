@@ -6,6 +6,21 @@
   }
 }
 
+/* Prevent iOS Safari from auto-zooming on input focus (< 16px causes iOS auto-zoom) */
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Ensure smooth mobile scrolling and no horizontal overflow */
+html, body {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

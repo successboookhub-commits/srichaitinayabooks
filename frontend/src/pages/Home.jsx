@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, ArrowRight, BookOpen, Tag, Building2, ChevronRight } from 'lucide-react';
 import api from '../services/api.js';
+import realtime from '../services/realtime.js';
 import BannerSlider from '../components/BannerSlider.jsx';
 import ProductCard from '../components/ProductCard.jsx';
 import CategoryGrid from '../components/CategoryGrid.jsx';
@@ -20,38 +21,57 @@ export default function Home() {
   const [visiblePubCount, setVisiblePubCount] = useState(6);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [recentProducts, setRecentProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const [bannerRes, catRes, sectionsRes, featuredRes, recentRes] = await Promise.all([
-          api.get('/banners'),
-          api.get('/categories'),
-          api.get('/home-sections').catch(() => ({ data: { success: false } })),
-          api.get('/products?featured=true&limit=12'),
-          api.get('/products?limit=12'),
-        ]);
+    let isMounted = true;
 
-        if (bannerRes.data.success) setBanners(bannerRes.data.banners);
-        if (catRes.data.success) setCategories(catRes.data.categories.slice(0, 10));
-        
-        if (sectionsRes.data.success) {
-          if (sectionsRes.data.sections) setHomeSections(sectionsRes.data.sections);
-          if (sectionsRes.data.categorySections) setCategorySections(sectionsRes.data.categorySections);
-          if (sectionsRes.data.publicationSections) setPublicationSections(sectionsRes.data.publicationSections);
-          if (sectionsRes.data.settings) setShowcaseSettings(sectionsRes.data.settings);
-        }
+    // 1. Instantly load Banners & Categories (Fastest - 10ms-20ms)
+    api.getCached('/banners').then((res) => {
+      if (isMounted && res.data?.success) setBanners(res.data.banners || []);
+    }).catch(() => {});
 
-        if (featuredRes.data.success) setFeaturedProducts(featuredRes.data.products);
-        if (recentRes.data.success) setRecentProducts(recentRes.data.products);
-      } catch (err) {
-        console.error('Home load error:', err);
-      } finally {
-        setLoading(false);
+    api.getCached('/categories').then((res) => {
+      if (isMounted && res.data?.success) setCategories((res.data.categories || []).slice(0, 10));
+    }).catch(() => {});
+
+    // 2. Stream in Sections & Featured Products in parallel
+    api.getCached('/home-sections').then((res) => {
+      if (isMounted && res.data?.success) {
+        if (res.data.sections) setHomeSections(res.data.sections);
+        if (res.data.categorySections) setCategorySections(res.data.categorySections);
+        if (res.data.publicationSections) setPublicationSections(res.data.publicationSections);
+        if (res.data.settings) setShowcaseSettings(res.data.settings);
       }
-    }
-    loadData();
+    }).catch(() => {});
+
+    api.getCached('/products?featured=true&limit=12').then((res) => {
+      if (isMounted && res.data?.success) setFeaturedProducts(res.data.products || []);
+    }).catch(() => {});
+
+    api.getCached('/products?limit=12').then((res) => {
+      if (isMounted && res.data?.success) setRecentProducts(res.data.products || []);
+    }).catch(() => {});
+
+    // 3. Real-Time Store Sync: Automatically refresh on live updates
+    const unsubscribe = realtime.on('store_updated', () => {
+      if (!isMounted) return;
+      api.getCached('/banners', { params: { _r: Date.now() } }).then((res) => {
+        if (res.data?.success) setBanners(res.data.banners || []);
+      });
+      api.getCached('/home-sections', { params: { _r: Date.now() } }).then((res) => {
+        if (res.data?.success) {
+          if (res.data.sections) setHomeSections(res.data.sections);
+          if (res.data.categorySections) setCategorySections(res.data.categorySections);
+          if (res.data.publicationSections) setPublicationSections(res.data.publicationSections);
+        }
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   return (

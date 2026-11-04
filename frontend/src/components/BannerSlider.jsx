@@ -14,7 +14,13 @@ export default function BannerSlider({ banners = [] }) {
     return () => clearInterval(interval);
   }, [banners.length]);
 
-  if (!banners.length) return null;
+  if (!banners.length) {
+    return (
+      <div className="w-full aspect-[2.55/1] max-h-[520px] rounded-2xl md:rounded-3xl bg-slate-100 animate-pulse border border-slate-200/60 shadow-xs flex items-center justify-center">
+        <div className="w-7 h-7 border-3 border-red-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % banners.length);
   const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + banners.length) % banners.length);
@@ -30,6 +36,9 @@ export default function BannerSlider({ banners = [] }) {
             <img
               src={getImageUrl(b.image)}
               alt={b.title || 'Promotional Banner'}
+              loading={idx === 0 ? 'eager' : 'lazy'}
+              fetchPriority={idx === 0 ? 'high' : 'auto'}
+              decoding="async"
               className="w-full h-full object-contain object-center"
             />
             {b.title && (

@@ -48,8 +48,8 @@ export default function Shop() {
     async function loadMeta() {
       try {
         const [catRes, pubRes] = await Promise.all([
-          api.get('/categories'),
-          api.get('/publications'),
+          api.getCached('/categories'),
+          api.getCached('/publications'),
         ]);
         if (catRes.data.success) setCategories(catRes.data.categories || []);
         if (pubRes.data.success) setPublications(pubRes.data.publications || []);

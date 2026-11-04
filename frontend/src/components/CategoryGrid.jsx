@@ -84,11 +84,11 @@ export default function CategoryGrid() {
   const [allCategories, setAllCategories] = useState([]);
   const [modalSearch, setModalSearch] = useState('');
 
-  // Load full categories list for dynamic display & the modal
+  // Load full categories list for dynamic display & the modal (Cached 0ms)
   useEffect(() => {
     async function loadAllCategories() {
       try {
-        const res = await api.get('/categories');
+        const res = await api.getCached('/categories');
         if (res.data.success) {
           setAllCategories(res.data.categories || []);
         }

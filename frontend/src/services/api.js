@@ -7,6 +7,7 @@ export const SERVER_URL = isLocal ? 'http://localhost:5000' : '';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 20000,
 });
 
 api.interceptors.request.use((config) => {
@@ -16,6 +17,48 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// High-Performance In-Memory Cache (SWR - Stale While Revalidate)
+const memoryCache = new Map();
+const DEFAULT_CACHE_TTL = 90 * 1000; // 90 seconds client cache
+
+api.getCached = async (url, config = {}) => {
+  const cacheKey = url + JSON.stringify(config.params || {});
+  const cached = memoryCache.get(cacheKey);
+  const now = Date.now();
+
+  // Instant response from memory cache (0ms)
+  if (cached && (now - cached.timestamp < DEFAULT_CACHE_TTL)) {
+    // Background quiet revalidation if older than 20 seconds
+    if (now - cached.timestamp > 20 * 1000) {
+      api.get(url, config).then((freshRes) => {
+        memoryCache.set(cacheKey, { timestamp: Date.now(), response: freshRes });
+      }).catch(() => {});
+    }
+    return Promise.resolve(cached.response);
+  }
+
+  const response = await api.get(url, config);
+  memoryCache.set(cacheKey, { timestamp: now, response });
+  return response;
+};
+
+// Clear client cache on state-changing operations
+api.clearCache = () => {
+  memoryCache.clear();
+};
+
+api.interceptors.response.use(
+  (response) => {
+    // If a write operation succeeded, clear cache so data is fresh
+    const method = response.config?.method?.toLowerCase();
+    if (method === 'post' || method === 'put' || method === 'delete') {
+      memoryCache.clear();
+    }
+    return response;
+  },
+  (error) => Promise.reject(error)
+);
 
 export const getImageUrl = (imagePath) => {
   if (!imagePath) return '/placeholder-book.png';
@@ -34,7 +77,7 @@ export const getInvoiceUrl = (orderCode) => {
   return `${API_BASE_URL}/order-history/invoice/${orderCode}`;
 };
 
-// Also attach to api instance so api.getImageUrl(...) and api.getInvoiceUrl(...) work everywhere safely
+// Attach helpers to api instance
 api.getImageUrl = getImageUrl;
 api.getInvoiceUrl = getInvoiceUrl;
 

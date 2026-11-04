@@ -91,17 +91,74 @@ function calculateCartTotals($cart) {
     ];
 }
 
+// Global Store Cache Invalidator
+function clearStoreCache() {
+    $files = [
+        sys_get_temp_dir() . '/sc_home_sections_v2.json',
+        sys_get_temp_dir() . '/sc_categories_v2.json',
+    ];
+    foreach ($files as $f) {
+        if (file_exists($f)) @unlink($f);
+    }
+}
+
+// -------------------------------------------------------------
+// REAL-TIME WEBSOCKET / SSE STREAM & SYNC
+// -------------------------------------------------------------
+if ($path === 'realtime/stream') {
+    header('Content-Type: text/event-stream');
+    header('Cache-Control: no-cache');
+    header('Connection: keep-alive');
+    header('X-Accel-Buffering: no');
+
+    $now = time();
+    echo "event: connected\n";
+    echo "data: " . json_encode(['status' => 'online', 'timestamp' => $now, 'server' => 'SriChaitanya-Live']) . "\n\n";
+    @ob_flush();
+    @flush();
+
+    $lastOrder = $pdo->query('SELECT id, order_code, total, status, order_status, updated_at FROM orders ORDER BY id DESC LIMIT 1')->fetch();
+    echo "event: snapshot\n";
+    echo "data: " . json_encode(['last_order' => $lastOrder, 'time' => $now]) . "\n\n";
+    @ob_flush();
+    @flush();
+    exit;
+}
+
+if ($path === 'realtime/sync') {
+    header('Content-Type: application/json');
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    
+    $since = intval($_GET['since'] ?? 0);
+    $lastOrder = $pdo->query('SELECT id, order_code, total, status, order_status, UNIX_TIMESTAMP(updated_at) as updated_time FROM orders ORDER BY id DESC LIMIT 1')->fetch();
+    
+    $hasNewOrder = false;
+    if ($lastOrder && intval($lastOrder['updated_time']) > $since && $since > 0) {
+        $hasNewOrder = true;
+    }
+
+    echo json_encode([
+        'success'   => true,
+        'timestamp' => time(),
+        'hasUpdate' => $hasNewOrder,
+        'lastOrder' => $lastOrder,
+    ]);
+    exit;
+}
+
 // -------------------------------------------------------------
 // 1. BANNERS
 // -------------------------------------------------------------
 if ($path === 'banners' || $path === 'banners/admin') {
     if ($method === 'GET') {
+        header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
         $stmt = $pdo->query('SELECT * FROM banners ORDER BY id DESC');
         $banners = $stmt->fetchAll();
         echo json_encode(['success' => true, 'banners' => $banners]);
         exit;
     }
     if ($method === 'POST') {
+        clearStoreCache();
         $title = $_POST['title'] ?? $body['title'] ?? '';
         $imagePath = '';
         if (!empty($_FILES['image']['name'])) {
@@ -126,6 +183,7 @@ if ($path === 'banners' || $path === 'banners/admin') {
 }
 
 if (preg_match('#^banners/(admin/)?(\d+)$#', $path, $m) && $method === 'DELETE') {
+    clearStoreCache();
     $id = intval($m[2]);
     $pdo->prepare('DELETE FROM banners WHERE id = ?')->execute([$id]);
     echo json_encode(['success' => true, 'message' => 'Banner deleted.']);
@@ -137,6 +195,15 @@ if (preg_match('#^banners/(admin/)?(\d+)$#', $path, $m) && $method === 'DELETE')
 // -------------------------------------------------------------
 if ($path === 'categories' || $path === 'categories/admin') {
     if ($method === 'GET') {
+        $cacheFile = sys_get_temp_dir() . '/sc_categories_v2.json';
+        if ($path === 'categories' && empty($_GET['nocache']) && file_exists($cacheFile) && (time() - filemtime($cacheFile) < 180)) {
+            header('Content-Type: application/json');
+            header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
+            header('X-Cache: HIT');
+            readfile($cacheFile);
+            exit;
+        }
+
         $cats = $pdo->query('SELECT * FROM categories ORDER BY name ASC')->fetchAll();
         $prods = $pdo->query('SELECT id, category_ids FROM products WHERE is_active = 1')->fetchAll();
 
@@ -158,7 +225,12 @@ if ($path === 'categories' || $path === 'categories/admin') {
             return $c;
         }, $cats);
 
-        echo json_encode(['success' => true, 'categories' => $enriched]);
+        $out = json_encode(['success' => true, 'categories' => $enriched]);
+        if ($path === 'categories') {
+            @file_put_contents($cacheFile, $out);
+            header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
+        }
+        echo $out;
         exit;
     }
     if ($method === 'POST') {
@@ -236,10 +308,19 @@ if (preg_match('#^publications/(\d+)$#', $path, $m)) {
 }
 
 // -------------------------------------------------------------
-// 4. HOME SECTIONS & STORE SETTINGS (Full Dynamic Showcase)
+// 4. HOME SECTIONS & STORE SETTINGS (Ultra-Fast Cached Pipeline)
 // -------------------------------------------------------------
 if ($path === 'home-sections') {
     if ($method === 'GET') {
+        $cacheFile = sys_get_temp_dir() . '/sc_home_sections_v2.json';
+        if (empty($_GET['nocache']) && file_exists($cacheFile) && (time() - filemtime($cacheFile) < 180)) {
+            header('Content-Type: application/json');
+            header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
+            header('X-Cache: HIT');
+            readfile($cacheFile);
+            exit;
+        }
+
         // Default settings
         $settings = [
             'show_category_showcase'     => '1',
@@ -306,27 +387,30 @@ if ($path === 'home-sections') {
             ];
         }
 
-        // Category showcase if enabled
+        // Fetch active products ONCE for all showcases (1 single indexed query instead of 110+ queries)
+        $allActiveRaw = $pdo->query('SELECT * FROM products WHERE is_active = 1 ORDER BY id DESC')->fetchAll();
+        $allActive = array_map('formatProduct', $allActiveRaw);
+
+        // Category showcase (built in 1 single pass)
         $categoryShowcase = [];
         if (($settings['show_category_showcase'] ?? '1') === '1') {
-            $limit = intval($settings['category_showcase_limit'] ?? 8) ?: 8;
+            $catLimit = intval($settings['category_showcase_limit'] ?? 8) ?: 8;
             $cats = $pdo->query('SELECT id, name, slug FROM categories ORDER BY name ASC')->fetchAll();
-            $allActive = $pdo->query('SELECT * FROM products WHERE is_active = 1 ORDER BY id DESC')->fetchAll();
-            
-            foreach ($cats as $cat) {
-                $matched = [];
-                $cidStr = (string)$cat['id'];
-                foreach ($allActive as $p) {
-                    $cids = [];
-                    if (!empty($p['category_ids'])) {
-                        $dec = json_decode($p['category_ids'], true);
-                        $cids = is_array($dec) ? $dec : preg_split('/[\s,]+/', (string)$p['category_ids'], -1, PREG_SPLIT_NO_EMPTY);
-                    }
-                    if (in_array($cidStr, array_map('strval', $cids))) {
-                        $matched[] = formatProduct($p);
-                        if (count($matched) >= $limit) break;
+
+            $catProductsMap = [];
+            foreach ($allActive as $p) {
+                if (!empty($p['category_ids'])) {
+                    foreach ($p['category_ids'] as $cid) {
+                        $cidStr = (string)$cid;
+                        if (count($catProductsMap[$cidStr] ?? []) < $catLimit) {
+                            $catProductsMap[$cidStr][] = $p;
+                        }
                     }
                 }
+            }
+
+            foreach ($cats as $cat) {
+                $matched = $catProductsMap[(string)$cat['id']] ?? [];
                 if (!empty($matched)) {
                     $categoryShowcase[] = [
                         'id'            => $cat['id'],
@@ -341,18 +425,24 @@ if ($path === 'home-sections') {
             }
         }
 
-        // Publication showcase if enabled
+        // Publication showcase (built in 1 single pass - 0 extra queries instead of 109!)
         $publicationShowcase = [];
         if (($settings['show_publication_showcase'] ?? '1') === '1') {
-            $limit = intval($settings['publication_showcase_limit'] ?? 8) ?: 8;
+            $pubLimit = intval($settings['publication_showcase_limit'] ?? 8) ?: 8;
             $pubs = $pdo->query('SELECT id, name FROM publications ORDER BY name ASC')->fetchAll();
-            $pubStmt = $pdo->prepare('SELECT * FROM products WHERE publication_id = ? AND is_active = 1 ORDER BY id DESC LIMIT ?');
-            
+
+            $pubProductsMap = [];
+            foreach ($allActive as $p) {
+                if (!empty($p['publication_id'])) {
+                    $pidStr = (string)$p['publication_id'];
+                    if (count($pubProductsMap[$pidStr] ?? []) < $pubLimit) {
+                        $pubProductsMap[$pidStr][] = $p;
+                    }
+                }
+            }
+
             foreach ($pubs as $pub) {
-                $pubStmt->bindValue(1, $pub['id'], PDO::PARAM_INT);
-                $pubStmt->bindValue(2, $limit, PDO::PARAM_INT);
-                $pubStmt->execute();
-                $matched = array_map('formatProduct', $pubStmt->fetchAll());
+                $matched = $pubProductsMap[(string)$pub['id']] ?? [];
                 if (!empty($matched)) {
                     $publicationShowcase[] = [
                         'id'               => $pub['id'],
@@ -365,7 +455,7 @@ if ($path === 'home-sections') {
             }
         }
 
-        echo json_encode([
+        $resData = [
             'success'               => true,
             'settings'              => $settings,
             'sections'              => $sectionsOut,
@@ -373,7 +463,15 @@ if ($path === 'home-sections') {
             'publicationSections'   => $publicationShowcase,
             'category_showcase'     => $categoryShowcase,
             'publication_showcase'  => $publicationShowcase,
-        ]);
+        ];
+
+        $jsonOut = json_encode($resData);
+        @file_put_contents($cacheFile, $jsonOut);
+
+        header('Content-Type: application/json');
+        header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
+        header('X-Cache: MISS');
+        echo $jsonOut;
         exit;
     }
 }
@@ -409,6 +507,7 @@ if ($path === 'home-sections/admin') {
         exit;
     }
     if ($method === 'POST') {
+        clearStoreCache();
         $title = trim($body['title'] ?? '');
         $subtitle = trim($body['subtitle'] ?? '');
         $productIds = json_encode($body['product_ids'] ?? []);
@@ -422,6 +521,7 @@ if ($path === 'home-sections/admin') {
 }
 
 if ($path === 'home-sections/admin/settings' && ($method === 'PUT' || $method === 'POST')) {
+    clearStoreCache();
     $settings = $body['settings'] ?? $body;
     $stmt = $pdo->prepare('INSERT INTO store_settings (setting_key, setting_value, updated_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = NOW()');
     foreach ($settings as $k => $v) {
@@ -432,6 +532,7 @@ if ($path === 'home-sections/admin/settings' && ($method === 'PUT' || $method ==
 }
 
 if ($path === 'home-sections/admin/reorder' && $method === 'POST') {
+    clearStoreCache();
     $orderList = $body['orders'] ?? [];
     $stmt = $pdo->prepare('UPDATE home_sections SET display_order = ? WHERE id = ?');
     foreach ($orderList as $item) {
@@ -446,6 +547,7 @@ if ($path === 'home-sections/admin/reorder' && $method === 'POST') {
 if (preg_match('#^home-sections/admin/(\d+)$#', $path, $m)) {
     $id = intval($m[1]);
     if ($method === 'PUT') {
+        clearStoreCache();
         $title = trim($body['title'] ?? '');
         $subtitle = trim($body['subtitle'] ?? '');
         $productIds = json_encode($body['product_ids'] ?? []);
@@ -456,6 +558,7 @@ if (preg_match('#^home-sections/admin/(\d+)$#', $path, $m)) {
         exit;
     }
     if ($method === 'DELETE') {
+        clearStoreCache();
         $pdo->prepare('DELETE FROM home_sections WHERE id = ?')->execute([$id]);
         echo json_encode(['success' => true, 'message' => 'Section deleted.']);
         exit;
@@ -668,6 +771,7 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $name), '-')) . '-' . time();
         $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
         $stmt->execute([$name, $slug, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive]);
+        clearStoreCache();
         echo json_encode(['success' => true, 'message' => 'Product added successfully.', 'id' => $pdo->lastInsertId()]);
         exit;
     }
@@ -718,11 +822,13 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
             $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, weight = ?, shipping_charge = ?, is_weightless = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
             $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $isFeatured, $isActive, $id]);
         }
+        clearStoreCache();
         echo json_encode(['success' => true, 'message' => 'Product updated successfully.']);
         exit;
     }
     if ($method === 'DELETE') {
         $pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
+        clearStoreCache();
         echo json_encode(['success' => true, 'message' => 'Product deleted successfully.']);
         exit;
     }

@@ -463,86 +463,193 @@ if (preg_match('#^home-sections/admin/(\d+)$#', $path, $m)) {
 }
 
 // -------------------------------------------------------------
-// 5. PRODUCTS (Search, Filter, List, Single)
+// 5. PRODUCTS (Search, Filter, List, Pagination, Single, Export)
 // -------------------------------------------------------------
-if ($path === 'products' || $path === 'products/admin') {
-    if ($method === 'GET') {
-        $categoryId    = $_GET['category_id'] ?? null;
-        $publicationId = $_GET['publication_id'] ?? null;
-        $search        = trim($_GET['search'] ?? $_GET['q'] ?? '');
-        $featured      = $_GET['featured'] ?? null;
-        $limit         = isset($_GET['limit']) ? intval($_GET['limit']) : 0;
+if ($path === 'products/export' && $method === 'GET') {
+    $categoryId    = $_GET['category_id'] ?? null;
+    $publicationId = $_GET['publication_id'] ?? null;
+    $search        = trim($_GET['search'] ?? '');
+    $featured      = $_GET['is_featured'] ?? null;
+    $stockStatus   = $_GET['stock_status'] ?? null;
 
-        $sql = 'SELECT * FROM products WHERE is_active = 1';
+    $sql = "SELECT p.*, pub.name AS publication_name FROM products p LEFT JOIN publications pub ON p.publication_id = pub.id WHERE 1=1";
+    $params = [];
+
+    if (!empty($publicationId)) {
+        $sql .= " AND p.publication_id = ?";
+        $params[] = intval($publicationId);
+    }
+    if ($featured !== null && $featured !== '') {
+        $sql .= ($featured === '1' || $featured === 'true') ? " AND p.is_featured = 1" : " AND (p.is_featured = 0 OR p.is_featured IS NULL)";
+    }
+    if (!empty($stockStatus)) {
+        if ($stockStatus === 'in_stock') {
+            $sql .= " AND p.quantity > 0";
+        } elseif ($stockStatus === 'out_of_stock') {
+            $sql .= " AND (p.quantity <= 0 OR p.quantity IS NULL)";
+        }
+    }
+    if (!empty($categoryId)) {
+        $sql .= " AND ((JSON_VALID(p.category_ids) AND JSON_CONTAINS(p.category_ids, JSON_QUOTE(?))) OR p.category_ids LIKE ?)";
+        $params[] = strval($categoryId);
+        $params[] = '%"' . $categoryId . '"%';
+    }
+    if (!empty($search)) {
+        $sql .= " AND (p.name LIKE ? OR p.id = ? OR pub.name LIKE ? OR p.description LIKE ?)";
+        $term = "%{$search}%";
+        $params[] = $term;
+        $params[] = is_numeric($search) ? intval($search) : 0;
+        $params[] = $term;
+        $params[] = $term;
+    }
+
+    $sql .= " ORDER BY p.id DESC";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+
+    $nowStr = date('Y-m-d');
+    $filename = "SriChaitanya_Book_Catalog_" . $nowStr . ".csv";
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['ID', 'Book Name', 'Publisher', 'Selling Price', 'MRP', 'Discount %', 'Stock', 'Weight', 'Shipping Charge', 'Status', 'Featured']);
+    foreach ($rows as $r) {
+        fputcsv($out, [
+            $r['id'],
+            $r['name'],
+            $r['publication_name'] ?? 'N/A',
+            $r['total_price'],
+            $r['old_price'],
+            $r['discount'],
+            $r['quantity'],
+            $r['weight'],
+            $r['shipping_charge'],
+            !empty($r['is_active']) ? 'Active' : 'Inactive',
+            !empty($r['is_featured']) ? 'Yes' : 'No',
+        ]);
+    }
+    fclose($out);
+    exit;
+}
+
+if ($path === 'products' || $path === 'products/admin' || $path === 'products/admin/list' || $path === 'products/list') {
+    if ($method === 'GET') {
+        $isAdmin = ($path === 'products/admin' || $path === 'products/admin/list');
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 0;
+        $categoryId = $_GET['category_id'] ?? null;
+        $publicationId = $_GET['publication_id'] ?? null;
+        $search = trim($_GET['search'] ?? $_GET['q'] ?? '');
+        $featured = $_GET['featured'] ?? $_GET['is_featured'] ?? null;
+        $stockStatus = $_GET['stock_status'] ?? null;
+
+        $sql = "SELECT p.*, pub.name AS publication_name FROM products p LEFT JOIN publications pub ON p.publication_id = pub.id WHERE 1=1";
         $params = [];
 
-        if (!empty($search)) {
-            $sql .= ' AND (name LIKE ? OR author LIKE ? OR description LIKE ?)';
-            $searchTerm = '%' . $search . '%';
-            $params[] = $searchTerm;
-            $params[] = $searchTerm;
-            $params[] = $searchTerm;
+        // For public storefront, show active books. For admin, show all catalog books
+        if (!$isAdmin) {
+            $sql .= " AND p.is_active = 1";
         }
 
-        if ($publicationId) {
-            $sql .= ' AND publication_id = ?';
+        if (!empty($search)) {
+            $sql .= " AND (p.name LIKE ? OR p.id = ? OR pub.name LIKE ? OR p.description LIKE ?)";
+            $term = '%' . $search . '%';
+            $params[] = $term;
+            $params[] = is_numeric($search) ? intval($search) : 0;
+            $params[] = $term;
+            $params[] = $term;
+        }
+
+        if (!empty($publicationId)) {
+            $sql .= " AND p.publication_id = ?";
             $params[] = intval($publicationId);
         }
 
-        if ($featured === 'true' || $featured === '1') {
-            $sql .= ' AND is_featured = 1';
+        if ($featured !== null && $featured !== '') {
+            if ($featured === '1' || $featured === 'true') {
+                $sql .= " AND p.is_featured = 1";
+            } elseif ($featured === '0' || $featured === 'false') {
+                $sql .= " AND (p.is_featured = 0 OR p.is_featured IS NULL)";
+            }
         }
 
-        $sql .= ' ORDER BY id DESC';
+        if (!empty($stockStatus)) {
+            if ($stockStatus === 'in_stock') {
+                $sql .= " AND p.quantity > 0";
+            } elseif ($stockStatus === 'out_of_stock') {
+                $sql .= " AND (p.quantity <= 0 OR p.quantity IS NULL)";
+            }
+        }
 
+        if (!empty($categoryId)) {
+            $catFilterIds = array_map('strval', preg_split('/[\s,]+/', (string)$categoryId, -1, PREG_SPLIT_NO_EMPTY));
+            if (count($catFilterIds) === 1) {
+                $sql .= " AND ((JSON_VALID(p.category_ids) AND JSON_CONTAINS(p.category_ids, JSON_QUOTE(?))) OR p.category_ids LIKE ?)";
+                $params[] = $catFilterIds[0];
+                $params[] = '%"' . $catFilterIds[0] . '"%';
+            } elseif (count($catFilterIds) > 1) {
+                $clauses = [];
+                foreach ($catFilterIds as $cid) {
+                    $clauses[] = "((JSON_VALID(p.category_ids) AND JSON_CONTAINS(p.category_ids, JSON_QUOTE(?))) OR p.category_ids LIKE ?)";
+                    $params[] = $cid;
+                    $params[] = '%"' . $cid . '"%';
+                }
+                $sql .= " AND (" . implode(' OR ', $clauses) . ")";
+            }
+        }
+
+        // Total count matching criteria
+        $countSql = "SELECT COUNT(*) FROM (" . $sql . ") as t";
+        $countStmt = $pdo->prepare($countSql);
+        $countStmt->execute($params);
+        $total = intval($countStmt->fetchColumn());
+
+        // Sort & Pagination
+        $sql .= " ORDER BY p.id DESC";
         if ($limit > 0) {
-            $sql .= ' LIMIT ' . $limit;
+            $offset = ($page - 1) * $limit;
+            $sql .= " LIMIT {$limit} OFFSET {$offset}";
         }
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
 
-        // If category_id filter was requested, filter by category_ids JSON in PHP for maximum DB compatibility
-        if ($categoryId) {
-            $catFilterIds = array_map('strval', preg_split('/[\s,]+/', (string)$categoryId, -1, PREG_SPLIT_NO_EMPTY));
-            $filtered = [];
-            foreach ($rows as $r) {
-                $cids = [];
-                if (!empty($r['category_ids'])) {
-                    $dec = json_decode($r['category_ids'], true);
-                    $cids = is_array($dec) ? $dec : preg_split('/[\s,]+/', (string)$r['category_ids'], -1, PREG_SPLIT_NO_EMPTY);
-                }
-                $cidsStr = array_map('strval', $cids);
-                foreach ($catFilterIds as $target) {
-                    if (in_array($target, $cidsStr)) {
-                        $filtered[] = $r;
-                        break;
-                    }
-                }
-            }
-            $rows = $filtered;
-        }
-
         $formatted = array_map('formatProduct', $rows);
         echo json_encode([
-            'success'  => true,
-            'count'    => count($formatted),
-            'products' => $formatted,
+            'success'    => true,
+            'total'      => $total,
+            'page'       => $page,
+            'totalPages' => $limit > 0 ? ceil($total / $limit) : 1,
+            'count'      => count($formatted),
+            'products'   => $formatted,
         ]);
         exit;
     }
     if ($method === 'POST') {
         $name = trim($_POST['name'] ?? $body['name'] ?? '');
-        $price = floatval($_POST['price'] ?? $_POST['total_price'] ?? $body['price'] ?? 0);
+        $price = floatval($_POST['price'] ?? $_POST['total_price'] ?? $body['price'] ?? $body['total_price'] ?? 0);
         $oldPrice = floatval($_POST['old_price'] ?? $body['old_price'] ?? 0);
         $discount = floatval($_POST['discount'] ?? $body['discount'] ?? 0);
-        $stock = intval($_POST['stock'] ?? $_POST['quantity'] ?? $body['stock'] ?? 10);
+        $stock = intval($_POST['stock'] ?? $_POST['quantity'] ?? $body['stock'] ?? $body['quantity'] ?? 10);
         $publicationId = intval($_POST['publication_id'] ?? $body['publication_id'] ?? 0) ?: null;
-        $categoryIds = json_encode($_POST['category_ids'] ?? $body['category_ids'] ?? []);
-        $description = $_POST['description'] ?? $body['description'] ?? '';
-        $isFeatured = isset($_POST['is_featured']) ? intval($_POST['is_featured']) : (isset($body['is_featured']) ? intval($body['is_featured']) : 0);
         
+        $catInput = $_POST['category_ids'] ?? $body['category_ids'] ?? [];
+        if (is_string($catInput)) {
+            $dec = json_decode($catInput, true);
+            $catInput = is_array($dec) ? $dec : preg_split('/[\s,]+/', $catInput, -1, PREG_SPLIT_NO_EMPTY);
+        }
+        $categoryIds = json_encode(array_values(array_map('intval', (array)$catInput)));
+        
+        $description = $_POST['description'] ?? $body['description'] ?? '';
+        $weightType = $_POST['weight_type'] ?? $body['weight_type'] ?? 'weight';
+        $isWeightless = ($weightType === 'weightless' || !empty($_POST['is_weightless']) || !empty($body['is_weightless'])) ? 1 : 0;
+        $weight = floatval($_POST['weight'] ?? $body['weight'] ?? 0.5);
+        $shippingCharge = floatval($_POST['shipping_charge'] ?? $body['shipping_charge'] ?? ($isWeightless ? 40 : ($weight * 70)));
+        $isFeatured = isset($_POST['is_featured']) ? intval($_POST['is_featured']) : (isset($body['is_featured']) ? intval($body['is_featured']) : 0);
+        $isActive = isset($_POST['is_active']) ? intval($_POST['is_active']) : (isset($body['is_active']) ? intval($body['is_active']) : 1);
+
         $imagePath = '';
         if (!empty($_FILES['main_photo']['name']) || !empty($_FILES['image']['name'])) {
             $f = !empty($_FILES['main_photo']['name']) ? $_FILES['main_photo'] : $_FILES['image'];
@@ -555,30 +662,42 @@ if ($path === 'products' || $path === 'products/admin') {
             }
         }
         if (!$imagePath) {
-            $imagePath = $_POST['main_photo'] ?? $body['main_photo'] ?? '';
+            $imagePath = $_POST['main_photo'] ?? $body['main_photo'] ?? $_POST['image'] ?? $body['image'] ?? '';
         }
 
         $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $name), '-')) . '-' . time();
-        $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, old_price, discount, quantity, publication_id, category_ids, description, main_photo, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())');
-        $stmt->execute([$name, $slug, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $imagePath, $isFeatured]);
-        echo json_encode(['success' => true, 'message' => 'Product added.', 'id' => $pdo->lastInsertId()]);
+        $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
+        $stmt->execute([$name, $slug, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive]);
+        echo json_encode(['success' => true, 'message' => 'Product added successfully.', 'id' => $pdo->lastInsertId()]);
         exit;
     }
 }
 
-// Update / Delete Product
+// Update / Delete Product (PUT/POST/DELETE on /products/:id or /products/admin/:id)
 if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
     $id = intval($m[2]);
     if ($method === 'PUT' || $method === 'POST') {
         $name = trim($_POST['name'] ?? $body['name'] ?? '');
-        $price = floatval($_POST['price'] ?? $_POST['total_price'] ?? $body['price'] ?? 0);
+        $price = floatval($_POST['price'] ?? $_POST['total_price'] ?? $body['price'] ?? $body['total_price'] ?? 0);
         $oldPrice = floatval($_POST['old_price'] ?? $body['old_price'] ?? 0);
         $discount = floatval($_POST['discount'] ?? $body['discount'] ?? 0);
-        $stock = intval($_POST['stock'] ?? $_POST['quantity'] ?? $body['stock'] ?? 10);
+        $stock = intval($_POST['stock'] ?? $_POST['quantity'] ?? $body['stock'] ?? $body['quantity'] ?? 10);
         $publicationId = intval($_POST['publication_id'] ?? $body['publication_id'] ?? 0) ?: null;
-        $categoryIds = json_encode($_POST['category_ids'] ?? $body['category_ids'] ?? []);
+
+        $catInput = $_POST['category_ids'] ?? $body['category_ids'] ?? [];
+        if (is_string($catInput)) {
+            $dec = json_decode($catInput, true);
+            $catInput = is_array($dec) ? $dec : preg_split('/[\s,]+/', $catInput, -1, PREG_SPLIT_NO_EMPTY);
+        }
+        $categoryIds = json_encode(array_values(array_map('intval', (array)$catInput)));
+
         $description = $_POST['description'] ?? $body['description'] ?? '';
+        $weightType = $_POST['weight_type'] ?? $body['weight_type'] ?? 'weight';
+        $isWeightless = ($weightType === 'weightless' || !empty($_POST['is_weightless']) || !empty($body['is_weightless'])) ? 1 : 0;
+        $weight = floatval($_POST['weight'] ?? $body['weight'] ?? 0.5);
+        $shippingCharge = floatval($_POST['shipping_charge'] ?? $body['shipping_charge'] ?? ($isWeightless ? 40 : ($weight * 70)));
         $isFeatured = isset($_POST['is_featured']) ? intval($_POST['is_featured']) : (isset($body['is_featured']) ? intval($body['is_featured']) : 0);
+        $isActive = isset($_POST['is_active']) ? intval($_POST['is_active']) : (isset($body['is_active']) ? intval($body['is_active']) : 1);
 
         $imagePath = '';
         if (!empty($_FILES['main_photo']['name']) || !empty($_FILES['image']['name'])) {
@@ -593,18 +712,18 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
         }
 
         if ($imagePath) {
-            $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, main_photo = ?, is_featured = ?, updated_at = NOW() WHERE id = ?');
-            $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $imagePath, $isFeatured, $id]);
+            $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, weight = ?, shipping_charge = ?, is_weightless = ?, main_photo = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
+            $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive, $id]);
         } else {
-            $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, is_featured = ?, updated_at = NOW() WHERE id = ?');
-            $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $isFeatured, $id]);
+            $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, weight = ?, shipping_charge = ?, is_weightless = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
+            $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $isFeatured, $isActive, $id]);
         }
-        echo json_encode(['success' => true, 'message' => 'Product updated.']);
+        echo json_encode(['success' => true, 'message' => 'Product updated successfully.']);
         exit;
     }
     if ($method === 'DELETE') {
         $pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
-        echo json_encode(['success' => true, 'message' => 'Product deleted.']);
+        echo json_encode(['success' => true, 'message' => 'Product deleted successfully.']);
         exit;
     }
 }

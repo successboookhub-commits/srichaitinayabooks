@@ -84,7 +84,7 @@ export default function CategoryGrid() {
   const [allCategories, setAllCategories] = useState([]);
   const [modalSearch, setModalSearch] = useState('');
 
-  // Load full categories list for the "Quick Browse All Exams" modal
+  // Load full categories list for dynamic display & the modal
   useEffect(() => {
     async function loadAllCategories() {
       try {
@@ -98,6 +98,34 @@ export default function CategoryGrid() {
     }
     loadAllCategories();
   }, []);
+
+  // Compute unified dynamic categories for the home strip: Primary ones + newly added custom ones
+  const dynamicCategories = React.useMemo(() => {
+    const primaryIds = new Set();
+    PRIMARY_CATEGORIES.forEach((p) => {
+      p.categoryId.split(',').forEach((id) => primaryIds.add(String(id.trim())));
+    });
+
+    const list = [...PRIMARY_CATEGORIES];
+
+    // Find custom / newly created categories in the DB not in primary presets
+    allCategories.forEach((c) => {
+      const cIdStr = String(c.id);
+      if (!primaryIds.has(cIdStr)) {
+        const count = c.product_count || 0;
+        list.push({
+          name: c.name,
+          categoryId: String(c.id),
+          icon: '/images/categories/value.webp',
+          subtitle: count > 0 ? `${count} Books Available` : 'Exam Books',
+          badge: count > 0 ? `${count} Books` : 'New Exam',
+          badgeColor: 'bg-red-50 text-red-700 border-red-200',
+        });
+      }
+    });
+
+    return list;
+  }, [allCategories]);
 
   const filteredModalCategories = allCategories.filter((c) => {
     if (!modalSearch.trim()) return true;
@@ -120,18 +148,18 @@ export default function CategoryGrid() {
           to="/shop"
           className="text-[11px] sm:text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 transition-colors"
         >
-          <span>All Categories</span>
+          <span>All Categories ({allCategories.length || 42})</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
 
-      {/* Grid: 9-Column on Desktop with Generous Breathing Room / Smooth Snap Scroll on Mobile */}
-      <div className="flex lg:grid lg:grid-cols-9 gap-2.5 sm:gap-3 xl:gap-3.5 overflow-x-auto lg:overflow-visible pb-2 pt-0.5 px-0.5 scrollbar-none w-full">
-        {PRIMARY_CATEGORIES.map((cat, idx) => (
+      {/* Grid: Responsive Horizontal Scroll with Snap on Mobile / Multi-column on Large Screens */}
+      <div className="flex gap-2.5 sm:gap-3 xl:gap-3.5 overflow-x-auto pb-3 pt-0.5 px-0.5 scrollbar-thin scrollbar-thumb-slate-200 w-full">
+        {dynamicCategories.map((cat, idx) => (
           <Link
             key={idx}
             to={`/shop?category_id=${cat.categoryId}`}
-            className="group relative flex flex-col items-center justify-between min-w-[125px] sm:min-w-[135px] lg:min-w-0 w-full bg-gradient-to-b from-white via-white to-slate-50/80 rounded-2xl border border-slate-200/90 p-2.5 sm:p-3.5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)] hover:shadow-[0_16px_32px_-8px_rgba(215,44,53,0.22)] hover:border-red-500/80 hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer overflow-hidden"
+            className="group relative flex flex-col items-center justify-between min-w-[130px] sm:min-w-[140px] md:min-w-[150px] bg-gradient-to-b from-white via-white to-slate-50/80 rounded-2xl border border-slate-200/90 p-2.5 sm:p-3.5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)] hover:shadow-[0_16px_32px_-8px_rgba(215,44,53,0.22)] hover:border-red-500/80 hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer overflow-hidden shrink-0"
           >
             {/* Top Multi-Color Gradient Highlight Bar on Hover */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

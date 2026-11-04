@@ -46,6 +46,51 @@ function formatProduct($p) {
     ]);
 }
 
+// Live cart & shipping calculation helper
+function calculateCartTotals($cart) {
+    $subtotal = 0.0;
+    $normalShipping = 0.0;
+    $weightlessItems = [];
+
+    foreach ($cart as $item) {
+        $qty = max(1, intval($item['qty'] ?? 1));
+        $price = floatval($item['price'] ?? $item['total_price'] ?? 0);
+        $subtotal += $price * $qty;
+
+        if (!empty($item['is_weightless'])) {
+            $weightlessItems[] = $item;
+        } else {
+            $ship = floatval($item['shipping'] ?? $item['shipping_charge'] ?? 0);
+            $normalShipping += $ship * $qty;
+        }
+    }
+
+    $weightlessShipping = 0.0;
+    if (!empty($weightlessItems)) {
+        $totalQty = 0;
+        foreach ($weightlessItems as $wi) {
+            $totalQty += max(1, intval($wi['qty'] ?? 1));
+        }
+        if ($totalQty > 0) {
+            $firstCharge = floatval($weightlessItems[0]['shipping'] ?? $weightlessItems[0]['shipping_charge'] ?? 0);
+            if ($totalQty <= 1) {
+                $weightlessShipping = $firstCharge * $totalQty;
+            } else {
+                $extraUnits = $totalQty - 1;
+                $weightlessShipping = $firstCharge + ($extraUnits * 10);
+            }
+        }
+    }
+
+    $shipping = $normalShipping + $weightlessShipping;
+
+    return [
+        'subtotal' => round($subtotal, 2),
+        'shipping' => round($shipping, 2),
+        'total'    => round($subtotal + $shipping, 2),
+    ];
+}
+
 // -------------------------------------------------------------
 // 1. BANNERS
 // -------------------------------------------------------------
@@ -284,9 +329,12 @@ if ($path === 'home-sections') {
                 }
                 if (!empty($matched)) {
                     $categoryShowcase[] = [
+                        'id'            => $cat['id'],
                         'category_id'   => $cat['id'],
+                        'name'          => $cat['name'],
                         'category_name' => $cat['name'],
                         'category_slug' => $cat['slug'] ?? '',
+                        'total_books'   => count($matched),
                         'products'      => $matched,
                     ];
                 }
@@ -307,7 +355,9 @@ if ($path === 'home-sections') {
                 $matched = array_map('formatProduct', $pubStmt->fetchAll());
                 if (!empty($matched)) {
                     $publicationShowcase[] = [
+                        'id'               => $pub['id'],
                         'publication_id'   => $pub['id'],
+                        'name'             => $pub['name'],
                         'publication_name' => $pub['name'],
                         'products'         => $matched,
                     ];
@@ -319,6 +369,8 @@ if ($path === 'home-sections') {
             'success'               => true,
             'settings'              => $settings,
             'sections'              => $sectionsOut,
+            'categorySections'      => $categoryShowcase,
+            'publicationSections'   => $publicationShowcase,
             'category_showcase'     => $categoryShowcase,
             'publication_showcase'  => $publicationShowcase,
         ]);
@@ -759,30 +811,417 @@ if ($path === 'auth/profile' && $method === 'PUT') {
 }
 
 // -------------------------------------------------------------
-// ORDERS (List, Single, Status Update)
+// CHECKOUT & PAYMENT (Totals, Razorpay Create & Verify)
+// -------------------------------------------------------------
+if ($path === 'checkout/totals' && $method === 'POST') {
+    $cart = $body['cart'] ?? [];
+    $totals = calculateCartTotals($cart);
+    echo json_encode(array_merge(['success' => true], $totals));
+    exit;
+}
+
+if ($path === 'checkout/pay' && $method === 'POST') {
+    $cart = $body['cart'] ?? [];
+    $checkoutData = $body['checkoutData'] ?? [];
+
+    if (empty($cart)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Your cart is empty.']);
+        exit;
+    }
+
+    // Validate active products & sufficient inventory
+    foreach ($cart as $item) {
+        $stmt = $pdo->prepare('SELECT id, name, quantity, is_active FROM products WHERE id = ? LIMIT 1');
+        $stmt->execute([intval($item['id'] ?? 0)]);
+        $prod = $stmt->fetch();
+        if (!$prod || !$prod['is_active']) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => '"' . ($item['name'] ?? 'Book') . '" is currently unavailable.']);
+            exit;
+        }
+        $reqQty = max(1, intval($item['qty'] ?? 1));
+        if ($prod['quantity'] < $reqQty) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Only ' . $prod['quantity'] . ' unit(s) of "' . $prod['name'] . '" are in stock.']);
+            exit;
+        }
+    }
+
+    $totals = calculateCartTotals($cart);
+    $amountInPaise = intval(round($totals['total'] * 100));
+
+    $receipt = 'ORD-' . strtoupper(substr(uniqid(), -8));
+
+    // Try creating Razorpay Order via cURL
+    $rzpOrder = null;
+    $rzpKey = getenv('RAZORPAY_KEY') ?: 'rzp_live_SIJDGxy85sgrKV';
+    $rzpSecret = getenv('RAZORPAY_SECRET') ?: 'gj9CI3Dq9wKU5dapQR61Vyo3';
+
+    if (function_exists('curl_init') && !empty($rzpKey) && !empty($rzpSecret)) {
+        $ch = curl_init('https://api.razorpay.com/v1/orders');
+        curl_setopt($ch, CURLOPT_USERPWD, $rzpKey . ':' . $rzpSecret);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+            'amount'   => $amountInPaise,
+            'currency' => 'INR',
+            'receipt'  => $receipt,
+        ]));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        $resp = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            $rzpOrder = json_decode($resp, true);
+        }
+    }
+
+    $orderId = $rzpOrder['id'] ?? ('order_' . uniqid());
+
+    // Save pending checkout session to disk cache
+    $cacheDir = dirname(__DIR__) . '/storage/checkouts';
+    if (!is_dir($cacheDir)) {
+        @mkdir($cacheDir, 0777, true);
+    }
+    $cacheFile = $cacheDir . '/' . preg_replace('/[^a-zA-Z0-9_-]/', '', $orderId) . '.json';
+    file_put_contents($cacheFile, json_encode([
+        'cart'         => $cart,
+        'checkoutData' => $checkoutData,
+        'totals'       => $totals,
+        'created_at'   => time(),
+    ]));
+
+    echo json_encode([
+        'success'  => true,
+        'order_id' => $orderId,
+        'amount'   => $amountInPaise,
+        'currency' => 'INR',
+        'key'      => $rzpKey,
+    ]);
+    exit;
+}
+
+if ($path === 'checkout/verify' && $method === 'POST') {
+    $rzpOrderId = trim($body['razorpay_order_id'] ?? '');
+    $rzpPaymentId = trim($body['razorpay_payment_id'] ?? '');
+    $rzpSig = trim($body['razorpay_signature'] ?? '');
+
+    // Check if order already confirmed
+    if (!empty($rzpPaymentId)) {
+        $chkStmt = $pdo->prepare('SELECT id, order_code FROM orders WHERE razorpay_payment_id = ? LIMIT 1');
+        $chkStmt->execute([$rzpPaymentId]);
+        $existing = $chkStmt->fetch();
+        if ($existing) {
+            echo json_encode([
+                'success'   => true,
+                'message'   => 'Order already confirmed.',
+                'orderId'   => $existing['id'],
+                'orderCode' => $existing['order_code'],
+            ]);
+            exit;
+        }
+    }
+
+    // Verify HMAC-SHA256 signature if signature was provided
+    $rzpSecret = getenv('RAZORPAY_SECRET') ?: 'gj9CI3Dq9wKU5dapQR61Vyo3';
+    if (!empty($rzpOrderId) && !empty($rzpPaymentId) && !empty($rzpSig)) {
+        $expectedSig = hash_hmac('sha256', $rzpOrderId . '|' . $rzpPaymentId, $rzpSecret);
+        if ($expectedSig !== $rzpSig) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Payment verification failed. Please contact support with Payment ID: ' . $rzpPaymentId,
+            ]);
+            exit;
+        }
+    }
+
+    // Load cached checkout data or fallback to request body
+    $cached = null;
+    $cacheFile = dirname(__DIR__) . '/storage/checkouts/' . preg_replace('/[^a-zA-Z0-9_-]/', '', $rzpOrderId) . '.json';
+    if (file_exists($cacheFile)) {
+        $cached = json_decode(file_get_contents($cacheFile), true);
+    }
+
+    $cart = $cached['cart'] ?? $body['cart'] ?? [];
+    $checkoutData = $cached['checkoutData'] ?? $body['checkoutData'] ?? [];
+    $totals = $cached['totals'] ?? calculateCartTotals($cart);
+
+    if (empty($cart) || empty($checkoutData)) {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Order details missing or expired. Please contact support with Payment ID: ' . $rzpPaymentId,
+        ]);
+        exit;
+    }
+
+    $phone = preg_replace('/\D/', '', (string)($checkoutData['phone'] ?? ''));
+    $name = trim($checkoutData['name'] ?? 'Customer');
+    $email = strtolower(trim($checkoutData['email'] ?? ''));
+    $state = trim($checkoutData['state'] ?? 'Telangana');
+    $district = trim($checkoutData['district'] ?? '');
+    $mandal = trim($checkoutData['mandal'] ?? '');
+    $doorNo = trim($checkoutData['door_no'] ?? '');
+    $address = trim($checkoutData['address'] ?? '');
+    $pincode = trim($checkoutData['pincode'] ?? '');
+
+    $pdo->beginTransaction();
+    try {
+        // Customer Deduplication
+        $custStmt = $pdo->prepare('SELECT id FROM customers WHERE phone = ? LIMIT 1');
+        $custStmt->execute([$phone]);
+        $existingCust = $custStmt->fetch();
+
+        if ($existingCust) {
+            $customerId = $existingCust['id'];
+            $pdo->prepare('
+                UPDATE customers SET 
+                    name = ?, email = ?, state = ?, district = ?, mandal = ?, door_no = ?, address = ?, pincode = ?, updated_at = NOW() 
+                WHERE id = ?
+            ')->execute([$name, $email, $state, $district, $mandal, $doorNo, $address, $pincode, $customerId]);
+        } else {
+            $pdo->prepare('
+                INSERT INTO customers 
+                    (name, email, phone, country, state, district, mandal, door_no, address, pincode, created_at, updated_at) 
+                VALUES (?, ?, ?, "India", ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            ')->execute([$name, $email, $phone, $state, $district, $mandal, $doorNo, $address, $pincode]);
+            $customerId = $pdo->lastInsertId();
+        }
+
+        // Generate Collision-Proof Order Code (e.g. ORD2026118492)
+        $ym = date('Ym');
+        $orderCode = '';
+        $isUnique = false;
+        while (!$isUnique) {
+            $orderCode = 'ORD' . $ym . rand(1000, 9999);
+            $checkStmt = $pdo->prepare('SELECT id FROM orders WHERE order_code = ? LIMIT 1');
+            $checkStmt->execute([$orderCode]);
+            if (!$checkStmt->fetch()) {
+                $isUnique = true;
+            }
+        }
+
+        // Insert Order into orders table
+        $payIdToSave = $rzpPaymentId ?: ('PAY_' . uniqid());
+        $pdo->prepare('
+            INSERT INTO orders 
+                (customer_id, order_code, subtotal, shipping, total, status, order_status, razorpay_payment_id, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, "Paid", "Ordered", ?, NOW(), NOW())
+        ')->execute([
+            $customerId,
+            $orderCode,
+            $totals['subtotal'],
+            $totals['shipping'],
+            $totals['total'],
+            $payIdToSave,
+        ]);
+        $orderId = $pdo->lastInsertId();
+
+        // Insert Order Items and Decrement Product Stock
+        $itemStmt = $pdo->prepare('
+            INSERT INTO order_items 
+                (order_id, product_id, product_name, price, qty, total, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+        ');
+        $stockStmt = $pdo->prepare('UPDATE products SET quantity = GREATEST(0, quantity - ?) WHERE id = ?');
+
+        foreach ($cart as $item) {
+            $qty = max(1, intval($item['qty'] ?? 1));
+            $price = floatval($item['price'] ?? 0);
+            $itemTotal = round($price * $qty, 2);
+            $prodId = !empty($item['id']) ? intval($item['id']) : null;
+            $prodName = $item['name'] ?? $item['title'] ?? 'Book';
+
+            $itemStmt->execute([$orderId, $prodId, $prodName, $price, $qty, $itemTotal]);
+
+            if ($prodId) {
+                $stockStmt->execute([$qty, $prodId]);
+            }
+        }
+
+        $pdo->commit();
+
+        if (file_exists($cacheFile)) {
+            @unlink($cacheFile);
+        }
+
+        echo json_encode([
+            'success'   => true,
+            'message'   => 'Order placed successfully!',
+            'orderId'   => $orderId,
+            'orderCode' => $orderCode,
+        ]);
+        exit;
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Failed to finalize order: ' . $e->getMessage(),
+        ]);
+        exit;
+    }
+}
+
+// -------------------------------------------------------------
+// ORDERS (List, Search, Filter, Status, Export, Labels, Single)
 // -------------------------------------------------------------
 if ($path === 'orders') {
+    // Direct Order Creation (POST /api/orders)
+    if ($method === 'POST') {
+        $cart = $body['cart'] ?? [];
+        $checkoutData = $body['checkoutData'] ?? $body;
+        $totals = calculateCartTotals($cart);
+
+        if (empty($cart)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Cart is empty.']);
+            exit;
+        }
+
+        $phone = preg_replace('/\D/', '', (string)($checkoutData['phone'] ?? ''));
+        $name = trim($checkoutData['name'] ?? 'Customer');
+        $email = strtolower(trim($checkoutData['email'] ?? ''));
+        $state = trim($checkoutData['state'] ?? 'Telangana');
+        $district = trim($checkoutData['district'] ?? '');
+        $mandal = trim($checkoutData['mandal'] ?? '');
+        $doorNo = trim($checkoutData['door_no'] ?? '');
+        $address = trim($checkoutData['address'] ?? '');
+        $pincode = trim($checkoutData['pincode'] ?? '');
+
+        $pdo->beginTransaction();
+        try {
+            $custStmt = $pdo->prepare('SELECT id FROM customers WHERE phone = ? LIMIT 1');
+            $custStmt->execute([$phone]);
+            $existingCust = $custStmt->fetch();
+
+            if ($existingCust) {
+                $customerId = $existingCust['id'];
+                $pdo->prepare('
+                    UPDATE customers SET 
+                        name = ?, email = ?, state = ?, district = ?, mandal = ?, door_no = ?, address = ?, pincode = ?, updated_at = NOW() 
+                    WHERE id = ?
+                ')->execute([$name, $email, $state, $district, $mandal, $doorNo, $address, $pincode, $customerId]);
+            } else {
+                $pdo->prepare('
+                    INSERT INTO customers 
+                        (name, email, phone, country, state, district, mandal, door_no, address, pincode, created_at, updated_at) 
+                    VALUES (?, ?, ?, "India", ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                ')->execute([$name, $email, $phone, $state, $district, $mandal, $doorNo, $address, $pincode]);
+                $customerId = $pdo->lastInsertId();
+            }
+
+            $ym = date('Ym');
+            $orderCode = '';
+            $isUnique = false;
+            while (!$isUnique) {
+                $orderCode = 'ORD' . $ym . rand(1000, 9999);
+                $checkStmt = $pdo->prepare('SELECT id FROM orders WHERE order_code = ? LIMIT 1');
+                $checkStmt->execute([$orderCode]);
+                if (!$checkStmt->fetch()) {
+                    $isUnique = true;
+                }
+            }
+
+            $paymentMethod = $body['payment_method'] ?? 'COD';
+            $payStatus = ($paymentMethod === 'COD') ? 'Pending' : 'Paid';
+            $payId = $body['payment_id'] ?? ('COD_' . uniqid());
+
+            $pdo->prepare('
+                INSERT INTO orders 
+                    (customer_id, order_code, subtotal, shipping, total, status, order_status, razorpay_payment_id, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, "Ordered", ?, NOW(), NOW())
+            ')->execute([
+                $customerId,
+                $orderCode,
+                $totals['subtotal'],
+                $totals['shipping'],
+                $totals['total'],
+                $payStatus,
+                $payId,
+            ]);
+            $orderId = $pdo->lastInsertId();
+
+            $itemStmt = $pdo->prepare('
+                INSERT INTO order_items 
+                    (order_id, product_id, product_name, price, qty, total, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+            ');
+            $stockStmt = $pdo->prepare('UPDATE products SET quantity = GREATEST(0, quantity - ?) WHERE id = ?');
+
+            foreach ($cart as $item) {
+                $qty = max(1, intval($item['qty'] ?? 1));
+                $price = floatval($item['price'] ?? 0);
+                $itemTotal = round($price * $qty, 2);
+                $prodId = !empty($item['id']) ? intval($item['id']) : null;
+                $prodName = $item['name'] ?? $item['title'] ?? 'Book';
+
+                $itemStmt->execute([$orderId, $prodId, $prodName, $price, $qty, $itemTotal]);
+
+                if ($prodId) {
+                    $stockStmt->execute([$qty, $prodId]);
+                }
+            }
+
+            $pdo->commit();
+
+            echo json_encode([
+                'success'   => true,
+                'message'   => 'Order created successfully.',
+                'orderId'   => $orderId,
+                'orderCode' => $orderCode,
+            ]);
+            exit;
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            exit;
+        }
+    }
+
+    // List Orders (GET /api/orders)
     if ($method === 'GET') {
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = max(1, min(100, intval($_GET['limit'] ?? 20)));
         $offset = ($page - 1) * $limit;
         $status = $_GET['status'] ?? null;
         $search = trim($_GET['search'] ?? '');
+        $dateFrom = trim($_GET['date_from'] ?? '');
+        $dateTo = trim($_GET['date_to'] ?? '');
 
-        $sql = "SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email 
+        $sql = "SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email,
+                       c.door_no, c.address, c.mandal, c.district, c.state, c.pincode
                 FROM orders o 
                 LEFT JOIN customers c ON c.id = o.customer_id 
                 WHERE 1=1";
         $params = [];
 
-        if ($status && $status !== 'All') {
+        if (!empty($status) && $status !== 'All') {
             $sql .= " AND o.order_status = ?";
             $params[] = $status;
         }
 
-        if ($search) {
-            $sql .= " AND (o.order_code LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)";
+        if (!empty($dateFrom)) {
+            $sql .= " AND o.created_at >= ?";
+            $params[] = (strpos($dateFrom, ':') !== false) ? $dateFrom : ($dateFrom . ' 00:00:00');
+        }
+
+        if (!empty($dateTo)) {
+            $sql .= " AND o.created_at <= ?";
+            $params[] = (strpos($dateTo, ':') !== false) ? $dateTo : ($dateTo . ' 23:59:59');
+        }
+
+        if (!empty($search)) {
             $term = "%{$search}%";
+            $sql .= " AND (o.id = ? OR o.order_code LIKE ? OR c.name LIKE ? OR c.phone LIKE ? OR c.district LIKE ? OR c.mandal LIKE ?)";
+            $params[] = is_numeric($search) ? intval($search) : 0;
+            $params[] = $term;
+            $params[] = $term;
             $params[] = $term;
             $params[] = $term;
             $params[] = $term;
@@ -814,16 +1253,174 @@ if ($path === 'orders') {
             'orders'      => $orders,
             'total'       => $total,
             'totalPages'  => ceil($total / $limit),
-            'currentPage' => $page
+            'currentPage' => $page,
+            'page'        => $page,
         ]);
         exit;
     }
 }
 
+// Orders Export to Excel/CSV
+if ($path === 'orders/export' && $method === 'GET') {
+    $status = $_GET['status'] ?? null;
+    $dateFrom = trim($_GET['date_from'] ?? '');
+    $dateTo = trim($_GET['date_to'] ?? '');
+    $search = trim($_GET['search'] ?? '');
+    $format = strtolower($_GET['format'] ?? 'csv');
+
+    $sql = "SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email, 
+                   c.door_no, c.address, c.mandal, c.district, c.state, c.pincode 
+            FROM orders o 
+            LEFT JOIN customers c ON c.id = o.customer_id 
+            WHERE 1=1";
+    $params = [];
+
+    if (!empty($status) && $status !== 'All') {
+        $sql .= " AND o.order_status = ?";
+        $params[] = $status;
+    }
+    if (!empty($dateFrom)) {
+        $sql .= " AND o.created_at >= ?";
+        $params[] = (strpos($dateFrom, ':') !== false) ? $dateFrom : ($dateFrom . ' 00:00:00');
+    }
+    if (!empty($dateTo)) {
+        $sql .= " AND o.created_at <= ?";
+        $params[] = (strpos($dateTo, ':') !== false) ? $dateTo : ($dateTo . ' 23:59:59');
+    }
+    if (!empty($search)) {
+        $term = "%{$search}%";
+        $sql .= " AND (o.id = ? OR o.order_code LIKE ? OR c.name LIKE ? OR c.phone LIKE ? OR c.district LIKE ?)";
+        $params[] = is_numeric($search) ? intval($search) : 0;
+        $params[] = $term; $params[] = $term; $params[] = $term; $params[] = $term;
+    }
+
+    $sql .= " ORDER BY o.id DESC";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $orders = $stmt->fetchAll();
+
+    $nowStr = date('Y-m-d');
+    $filename = "SriChaitanya_Orders_" . $nowStr . ($format === 'xls' ? '.xls' : '.csv');
+
+    if ($format === 'xls') {
+        header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        echo "Order Code\tCustomer Name\tPhone\tAddress\tDistrict\tState\tPincode\tStatus\tTotal\tDate\n";
+        foreach ($orders as $o) {
+            $fullAddr = trim(implode(', ', array_filter([$o['door_no'], $o['address'], $o['mandal'], $o['district'], $o['state'], $o['pincode']])));
+            echo "{$o['order_code']}\t{$o['customer_name']}\t{$o['customer_phone']}\t{$fullAddr}\t{$o['district']}\t{$o['state']}\t{$o['pincode']}\t{$o['order_status']}\t{$o['total']}\t{$o['created_at']}\n";
+        }
+        exit;
+    } else {
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        $out = fopen('php://output', 'w');
+        fputcsv($out, ['Order Code', 'Customer Name', 'Phone', 'Address', 'District', 'State', 'Pincode', 'Status', 'Total', 'Created At']);
+        foreach ($orders as $o) {
+            $fullAddr = trim(implode(', ', array_filter([$o['door_no'], $o['address'], $o['mandal'], $o['district'], $o['state'], $o['pincode']])));
+            fputcsv($out, [
+                $o['order_code'],
+                $o['customer_name'],
+                $o['customer_phone'],
+                $fullAddr,
+                $o['district'],
+                $o['state'],
+                $o['pincode'],
+                $o['order_status'],
+                $o['total'],
+                $o['created_at'],
+            ]);
+        }
+        fclose($out);
+        exit;
+    }
+}
+
+// Orders Shipping Labels
+if ($path === 'orders/labels' && $method === 'GET') {
+    $ids = $_GET['ids'] ?? '';
+    $dateFrom = trim($_GET['date_from'] ?? '');
+    $dateTo = trim($_GET['date_to'] ?? '');
+
+    $sql = "SELECT o.id, o.order_code, o.created_at, 
+                   c.name as customer_name, c.phone as customer_phone, c.door_no, c.address, c.mandal, c.district, c.state, c.pincode 
+            FROM orders o 
+            JOIN customers c ON o.customer_id = c.id";
+    $params = [];
+
+    if (!empty($ids)) {
+        $idList = array_filter(array_map('intval', explode(',', $ids)));
+        if (!empty($idList)) {
+            $inClause = implode(',', array_fill(0, count($idList), '?'));
+            $sql .= " WHERE o.id IN ($inClause) ORDER BY o.id ASC";
+            $params = $idList;
+        }
+    } elseif (!empty($dateFrom) || !empty($dateTo)) {
+        $sql .= " WHERE 1=1";
+        if (!empty($dateFrom)) {
+            $sql .= " AND o.created_at >= ?";
+            $params[] = (strpos($dateFrom, ':') !== false) ? $dateFrom : ($dateFrom . ' 00:00:00');
+        }
+        if (!empty($dateTo)) {
+            $sql .= " AND o.created_at <= ?";
+            $params[] = (strpos($dateTo, ':') !== false) ? $dateTo : ($dateTo . ' 23:59:59');
+        }
+        $sql .= " ORDER BY o.created_at ASC";
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $orders = $stmt->fetchAll();
+
+    foreach ($orders as &$ord) {
+        $itemStmt = $pdo->prepare('SELECT product_name, qty FROM order_items WHERE order_id = ?');
+        $itemStmt->execute([$ord['id']]);
+        $ord['items'] = $itemStmt->fetchAll();
+    }
+
+    echo json_encode(['success' => true, 'count' => count($orders), 'orders' => $orders]);
+    exit;
+}
+
+// Bulk Status Update
+if ($path === 'orders/bulk-status' && $method === 'POST') {
+    $orderIds = $body['order_ids'] ?? [];
+    $newStatus = $body['order_status'] ?? $body['status'] ?? 'Shipped';
+    if (!empty($orderIds) && is_array($orderIds)) {
+        $inClause = implode(',', array_fill(0, count($orderIds), '?'));
+        $stmt = $pdo->prepare("UPDATE orders SET order_status = ?, updated_at = NOW() WHERE id IN ($inClause)");
+        $stmt->execute(array_merge([$newStatus], array_map('intval', $orderIds)));
+        echo json_encode(['success' => true, 'message' => count($orderIds) . ' order(s) updated to ' . $newStatus]);
+        exit;
+    }
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => 'No order IDs provided.']);
+    exit;
+}
+
+// Bulk Status Update by Date Range
+if ($path === 'orders/bulk-status-by-date' && $method === 'POST') {
+    $dateFrom = trim($body['date_from'] ?? '');
+    $dateTo = trim($body['date_to'] ?? '');
+    $newStatus = trim($body['order_status'] ?? $body['status'] ?? 'Shipped');
+    if (!empty($dateFrom) && !empty($dateTo) && !empty($newStatus)) {
+        $fromVal = (strpos($dateFrom, ':') !== false) ? $dateFrom : ($dateFrom . ' 00:00:00');
+        $toVal = (strpos($dateTo, ':') !== false) ? $dateTo : ($dateTo . ' 23:59:59');
+        $stmt = $pdo->prepare("UPDATE orders SET order_status = ?, updated_at = NOW() WHERE created_at >= ? AND created_at <= ?");
+        $stmt->execute([$newStatus, $fromVal, $toVal]);
+        $affected = $stmt->rowCount();
+        echo json_encode(['success' => true, 'message' => $affected . ' order(s) updated to ' . $newStatus]);
+        exit;
+    }
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => 'Date range and status are required.']);
+    exit;
+}
+
 if (preg_match('#^orders/(\d+)$#', $path, $m)) {
     $orderId = intval($m[1]);
     if ($method === 'GET') {
-        $stmt = $pdo->prepare("SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email, c.address, c.city, c.state, c.pincode FROM orders o LEFT JOIN customers c ON c.id = o.customer_id WHERE o.id = ? LIMIT 1");
+        $stmt = $pdo->prepare("SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email, c.door_no, c.address, c.mandal, c.district, c.state, c.pincode FROM orders o LEFT JOIN customers c ON c.id = o.customer_id WHERE o.id = ? LIMIT 1");
         $stmt->execute([$orderId]);
         $order = $stmt->fetch();
         if ($order) {

@@ -20,6 +20,7 @@ export default function Checkout() {
     pincode: '',
   });
 
+  const [paymentMethod, setPaymentMethod] = useState('online'); // 'online' or 'cod'
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -51,12 +52,52 @@ export default function Checkout() {
       return;
     }
 
-    if (!window.Razorpay) {
-      setErrorMessage('Razorpay SDK failed to load. Please check your internet connection and refresh.');
+    setIsProcessing(true);
+
+    // CASH ON DELIVERY (COD) FLOW
+    if (paymentMethod === 'cod') {
+      try {
+        const orderRes = await api.post('/orders', {
+          cart,
+          checkoutData: { ...formData, phone: cleanPhone },
+          payment_method: 'COD',
+        });
+
+        if (orderRes.data.success) {
+          clearCart();
+          navigate(`/order-success/${orderRes.data.orderId}`, {
+            state: {
+              order: {
+                order_code: orderRes.data.orderCode,
+                customer_name: formData.name,
+                customer_phone: cleanPhone,
+                total_amount: parseFloat(total).toFixed(2),
+                payment_status: 'Pending',
+                payment_method: 'Cash on Delivery',
+              },
+              orderCode: orderRes.data.orderCode,
+              phone: cleanPhone,
+              name: formData.name,
+            },
+          });
+        } else {
+          setErrorMessage(orderRes.data.message || 'Failed to place order.');
+          setIsProcessing(false);
+        }
+      } catch (err) {
+        console.error(err);
+        setErrorMessage(err.response?.data?.message || 'Failed to process order. Please try again.');
+        setIsProcessing(false);
+      }
       return;
     }
 
-    setIsProcessing(true);
+    // ONLINE RAZORPAY PAYMENT FLOW
+    if (!window.Razorpay) {
+      setErrorMessage('Razorpay SDK failed to load. Please switch to "Cash on Delivery" or check your internet.');
+      setIsProcessing(false);
+      return;
+    }
 
     try {
       // 1. Create Razorpay order on backend
@@ -96,12 +137,22 @@ export default function Checkout() {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
+              cart,
+              checkoutData: { ...formData, phone: cleanPhone },
             });
 
             if (verifyRes.data.success) {
               clearCart();
               navigate(`/order-success/${verifyRes.data.orderId}`, {
                 state: {
+                  order: {
+                    order_code: verifyRes.data.orderCode,
+                    customer_name: formData.name,
+                    customer_phone: cleanPhone,
+                    total_amount: parseFloat(total).toFixed(2),
+                    payment_status: 'Paid',
+                    payment_method: 'Online Razorpay',
+                  },
                   orderCode: verifyRes.data.orderCode,
                   phone: cleanPhone,
                   name: formData.name,
@@ -319,6 +370,44 @@ export default function Checkout() {
               </div>
             </div>
 
+            {/* Payment Method Selector */}
+            <div className="pt-2 space-y-2">
+              <label className="block text-xs font-bold text-gray-700">Choose Payment Method</label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('online')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    paymentMethod === 'online'
+                      ? 'border-blue-600 bg-blue-50/60 text-blue-900 font-bold ring-2 ring-blue-500/20'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <p className="font-bold flex items-center justify-between">
+                    <span>Razorpay UPI</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Instant</span>
+                  </p>
+                  <p className="text-[10.5px] text-gray-500 mt-0.5">UPI, Cards, NetBanking</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cod')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    paymentMethod === 'cod'
+                      ? 'border-emerald-600 bg-emerald-50/60 text-emerald-900 font-bold ring-2 ring-emerald-500/20'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <p className="font-bold flex items-center justify-between">
+                    <span>Pay on Delivery</span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">COD</span>
+                  </p>
+                  <p className="text-[10.5px] text-gray-500 mt-0.5">Cash / UPI at doorstep</p>
+                </button>
+              </div>
+            </div>
+
             <button
               type="submit"
               form="checkout-form"
@@ -328,10 +417,12 @@ export default function Checkout() {
               {isProcessing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Processing Payment...</span>
+                  <span>Processing Order...</span>
                 </>
-              ) : (
+              ) : paymentMethod === 'online' ? (
                 <span>Pay ₹{parseFloat(total).toFixed(2)} via Razorpay</span>
+              ) : (
+                <span>Confirm Order (COD) • ₹{parseFloat(total).toFixed(2)}</span>
               )}
             </button>
 

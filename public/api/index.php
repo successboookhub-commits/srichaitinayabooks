@@ -1687,23 +1687,51 @@ if ($path === 'dashboard/stats') {
 }
 
 // -------------------------------------------------------------
-// 7. ORDER HISTORY & TRACKING
+// 7. ORDER HISTORY & TRACKING (Supports Order Code, Mobile Number, or Order ID)
 // -------------------------------------------------------------
-if (str_starts_with($path, 'order-history/orders')) {
+if (str_starts_with($path, 'order-history/orders') || $path === 'orders/track' || $path === 'tracking') {
     $q = trim($_GET['query'] ?? $_GET['order_code'] ?? $_GET['phone'] ?? '');
     if (empty($q)) {
         echo json_encode(['success' => true, 'orders' => []]);
         exit;
     }
 
+    $cleanPhone = preg_replace('/\D/', '', $q);
+    $upperCode = strtoupper($q);
+    $numericId = is_numeric($q) ? intval($q) : -1;
+
     $stmt = $pdo->prepare('
-        SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email
+        SELECT 
+            o.*, 
+            o.total AS total_amount,
+            c.name AS customer_name, 
+            c.phone AS customer_phone, 
+            c.email AS customer_email,
+            c.door_no,
+            c.address,
+            c.mandal,
+            c.district,
+            c.state,
+            c.pincode
         FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
-        WHERE o.order_code = ? OR c.phone = ? OR o.id = ?
+        WHERE o.order_code = ? 
+           OR o.order_code LIKE ?
+           OR c.phone = ?
+           OR (? != "" AND c.phone LIKE ?)
+           OR o.id = ?
         ORDER BY o.id DESC LIMIT 10
     ');
-    $stmt->execute([$q, $q, is_numeric($q) ? intval($q) : -1]);
+    $likeCode = '%' . $upperCode . '%';
+    $likePhone = '%' . $cleanPhone . '%';
+    $stmt->execute([
+        $upperCode,
+        $likeCode,
+        $cleanPhone ?: $q,
+        $cleanPhone,
+        $likePhone,
+        $numericId
+    ]);
     $orders = $stmt->fetchAll();
 
     foreach ($orders as &$ord) {
@@ -1714,7 +1742,13 @@ if (str_starts_with($path, 'order-history/orders')) {
             WHERE oi.order_id = ?
         ');
         $itemStmt->execute([$ord['id']]);
-        $ord['items'] = $itemStmt->fetchAll();
+        $items = $itemStmt->fetchAll();
+        $ord['items'] = $items;
+        $totalItemsCount = 0;
+        foreach ($items as $it) {
+            $totalItemsCount += intval($it['qty'] ?? 1);
+        }
+        $ord['total_items'] = $totalItemsCount ?: count($items);
     }
 
     echo json_encode(['success' => true, 'orders' => $orders]);

@@ -143,6 +143,22 @@ export default function App() {
         }
       />
       <Route
+        path="/track"
+        element={
+          <CustomerLayout>
+            <OrderTracking />
+          </CustomerLayout>
+        }
+      />
+      <Route
+        path="/track-order"
+        element={
+          <CustomerLayout>
+            <OrderTracking />
+          </CustomerLayout>
+        }
+      />
+      <Route
         path="/order-history"
         element={
           <CustomerLayout>

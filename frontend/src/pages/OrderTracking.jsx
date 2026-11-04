@@ -75,17 +75,19 @@ export default function OrderTracking() {
     handleSearch(null, val);
   };
 
-  // Status visual mapping & step tracker
+  // Status visual mapping & step tracker (Matches Admin Dropdown: Ordered, Processing, Packing, Shipped, Delivered)
   const getStatusStep = (status) => {
-    const s = String(status || '').toLowerCase();
-    if (s === 'delivered') return 4;
-    if (s === 'shipped') return 3;
-    if (s === 'processing' || s === 'packing') return 2;
+    const s = String(status || '').toLowerCase().trim();
+    if (s === 'delivered') return 5;
+    if (s === 'shipped') return 4;
+    if (s === 'packing') return 3;
+    if (s === 'processing') return 2;
+    if (s === 'ordered') return 1;
     return 1; // Ordered / Pending
   };
 
   const getStatusBadge = (status) => {
-    const s = String(status || '').toLowerCase();
+    const s = String(status || '').toLowerCase().trim();
     switch (s) {
       case 'delivered':
         return (
@@ -98,28 +100,35 @@ export default function OrderTracking() {
         return (
           <span className="bg-blue-50 text-blue-800 border border-blue-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
             <Truck className="w-3.5 h-3.5 text-blue-600" />
-            <span>In Transit / Shipped</span>
+            <span>Shipped (In Transit)</span>
           </span>
         );
       case 'packing':
+        return (
+          <span className="bg-purple-50 text-purple-800 border border-purple-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
+            <Package className="w-3.5 h-3.5 text-purple-600" />
+            <span>Packing in Progress</span>
+          </span>
+        );
       case 'processing':
         return (
           <span className="bg-amber-50 text-amber-800 border border-amber-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
             <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-            <span>Packing / Processing</span>
+            <span>Processing</span>
           </span>
         );
       case 'cancelled':
         return (
-          <span className="bg-rose-50 text-rose-800 border border-rose-300 text-xs font-black px-3 py-1 rounded-full">
-            Cancelled
+          <span className="bg-rose-50 text-rose-800 border border-rose-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
+            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+            <span>Cancelled</span>
           </span>
         );
       default:
         return (
           <span className="bg-slate-100 text-slate-800 border border-slate-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5">
             <Package className="w-3.5 h-3.5 text-slate-600" />
-            <span>Order Confirmed</span>
+            <span>Ordered</span>
           </span>
         );
     }
@@ -201,16 +210,16 @@ export default function OrderTracking() {
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-400">
               <span className="text-[11px] font-semibold">Try sample order:</span>
               <button
-                onClick={() => handleQuickDemo('7675092429')}
+                onClick={() => handleQuickDemo('6303130025')}
                 className="px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-slate-200 text-[11px] font-mono transition-colors cursor-pointer"
               >
-                📱 7675092429
+                📱 6303130025
               </button>
               <button
-                onClick={() => handleQuickDemo('ORD202602001')}
+                onClick={() => handleQuickDemo('ORD2026118980')}
                 className="px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-slate-200 text-[11px] font-mono transition-colors cursor-pointer"
               >
-                📦 ORD202602001
+                📦 ORD2026118980
               </button>
             </div>
 
@@ -324,117 +333,146 @@ export default function OrderTracking() {
                       <div className="flex items-center gap-3 self-end sm:self-auto">
                         <div className="text-right">
                           <p className="text-[10px] text-slate-400 uppercase font-semibold">Total Amount</p>
-                          <p className="text-lg font-black text-white">₹{order.total_amount}</p>
+                          <p className="text-lg font-black text-white">₹{parseFloat(order.total_amount || order.total || 0).toFixed(2)}</p>
                         </div>
                         {getStatusBadge(order.order_status)}
                       </div>
                     </div>
 
-                    {/* Visual 4-Step Tracking Timeline */}
+                    {/* Visual 5-Step Tracking Timeline or Cancelled Notice */}
                     <div className="p-5 sm:p-6 border-b border-slate-100 bg-slate-50/50">
-                      <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                        <Truck className="w-3.5 h-3.5 text-red-600" />
-                        <span>Fulfillment & Delivery Progress</span>
-                      </p>
-
-                      <div className="relative">
-                        {/* Connecting Background Line */}
-                        <div className="absolute top-4 left-4 right-4 sm:left-6 sm:right-6 h-1 bg-slate-200 rounded-full pointer-events-none" />
-                        
-                        {/* Active Filled Line */}
-                        <div
-                          className="absolute top-4 left-4 sm:left-6 h-1 bg-gradient-to-r from-red-600 to-rose-600 rounded-full transition-all duration-500 pointer-events-none"
-                          style={{
-                            width: currentStep === 1 ? '15%' : currentStep === 2 ? '45%' : currentStep === 3 ? '75%' : '94%'
-                          }}
-                        />
-
-                        {/* 4 Steps */}
-                        <div className="relative z-10 grid grid-cols-4 text-center">
-                          
-                          {/* Step 1: Confirmed */}
-                          <div className="space-y-1">
-                            <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                              currentStep >= 1 ? 'bg-red-600 text-white ring-4 ring-red-100' : 'bg-slate-200 text-slate-500'
-                            }`}>
-                              ✓
-                            </div>
-                            <p className="text-[11px] sm:text-xs font-black text-slate-900 leading-tight">Confirmed</p>
-                            <p className="text-[9.5px] text-slate-400 hidden sm:block">Order Verified</p>
+                      {String(order.order_status || '').toLowerCase() === 'cancelled' ? (
+                        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-800">
+                          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                          <div>
+                            <p className="font-extrabold text-xs sm:text-sm">Order Cancelled</p>
+                            <p className="text-[11px] text-rose-600">This consignment was cancelled. For refund inquiries or questions, please contact our support team.</p>
                           </div>
-
-                          {/* Step 2: Packing */}
-                          <div className="space-y-1">
-                            <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                              currentStep >= 2 ? 'bg-red-600 text-white ring-4 ring-red-100' : 'bg-slate-200 text-slate-500'
-                            }`}>
-                              {currentStep > 2 ? '✓' : '2'}
-                            </div>
-                            <p className="text-[11px] sm:text-xs font-black text-slate-900 leading-tight">Packed</p>
-                            <p className="text-[9.5px] text-slate-400 hidden sm:block">Water-Proof Seal</p>
-                          </div>
-
-                          {/* Step 3: Shipped */}
-                          <div className="space-y-1">
-                            <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                              currentStep >= 3 ? 'bg-red-600 text-white ring-4 ring-red-100' : 'bg-slate-200 text-slate-500'
-                            }`}>
-                              {currentStep > 3 ? '✓' : '3'}
-                            </div>
-                            <p className="text-[11px] sm:text-xs font-black text-slate-900 leading-tight">In Transit</p>
-                            <p className="text-[9.5px] text-slate-400 hidden sm:block">Courier Dispatched</p>
-                          </div>
-
-                          {/* Step 4: Delivered */}
-                          <div className="space-y-1">
-                            <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                              currentStep >= 4 ? 'bg-emerald-600 text-white ring-4 ring-emerald-100' : 'bg-slate-200 text-slate-500'
-                            }`}>
-                              {currentStep >= 4 ? '✓' : '4'}
-                            </div>
-                            <p className="text-[11px] sm:text-xs font-black text-slate-900 leading-tight">Delivered</p>
-                            <p className="text-[9.5px] text-slate-400 hidden sm:block">Doorstep Handover</p>
-                          </div>
-
                         </div>
-                      </div>
+                      ) : (
+                        <div>
+                          <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                            <Truck className="w-3.5 h-3.5 text-red-600" />
+                            <span>Live Consignment & Dispatch Progress</span>
+                          </p>
+
+                          <div className="relative">
+                            {/* Connecting Background Line */}
+                            <div className="absolute top-4 left-4 right-4 sm:left-6 sm:right-6 h-1 bg-slate-200 rounded-full pointer-events-none" />
+                            
+                            {/* Active Filled Line */}
+                            <div
+                              className="absolute top-4 left-4 sm:left-6 h-1 bg-gradient-to-r from-red-600 to-emerald-600 rounded-full transition-all duration-500 pointer-events-none"
+                              style={{
+                                width: currentStep === 1 ? '10%' : currentStep === 2 ? '32%' : currentStep === 3 ? '55%' : currentStep === 4 ? '78%' : '98%'
+                              }}
+                            />
+
+                            {/* 5 Distinct Order Status Steps */}
+                            <div className="relative z-10 grid grid-cols-5 text-center">
+                              
+                              {/* Step 1: Ordered */}
+                              <div className="space-y-1">
+                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
+                                  currentStep >= 1 ? 'bg-red-600 text-white ring-4 ring-red-100' : 'bg-slate-200 text-slate-500'
+                                }`}>
+                                  ✓
+                                </div>
+                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Ordered</p>
+                                <p className="text-[9px] text-slate-400 hidden sm:block">Placed</p>
+                              </div>
+
+                              {/* Step 2: Processing */}
+                              <div className="space-y-1">
+                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
+                                  currentStep >= 2 ? 'bg-amber-600 text-white ring-4 ring-amber-100' : 'bg-slate-200 text-slate-500'
+                                }`}>
+                                  {currentStep > 2 ? '✓' : '2'}
+                                </div>
+                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Processing</p>
+                                <p className="text-[9px] text-slate-400 hidden sm:block">Verified</p>
+                              </div>
+
+                              {/* Step 3: Packing */}
+                              <div className="space-y-1">
+                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
+                                  currentStep >= 3 ? 'bg-purple-600 text-white ring-4 ring-purple-100' : 'bg-slate-200 text-slate-500'
+                                }`}>
+                                  {currentStep > 3 ? '✓' : '3'}
+                                </div>
+                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Packing</p>
+                                <p className="text-[9px] text-slate-400 hidden sm:block">Sealed</p>
+                              </div>
+
+                              {/* Step 4: Shipped */}
+                              <div className="space-y-1">
+                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
+                                  currentStep >= 4 ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-slate-200 text-slate-500'
+                                }`}>
+                                  {currentStep > 4 ? '✓' : '4'}
+                                </div>
+                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Shipped</p>
+                                <p className="text-[9px] text-slate-400 hidden sm:block">In Transit</p>
+                              </div>
+
+                              {/* Step 5: Delivered */}
+                              <div className="space-y-1">
+                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
+                                  currentStep >= 5 ? 'bg-emerald-600 text-white ring-4 ring-emerald-100' : 'bg-slate-200 text-slate-500'
+                                }`}>
+                                  {currentStep >= 5 ? '✓' : '5'}
+                                </div>
+                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Delivered</p>
+                                <p className="text-[9px] text-slate-400 hidden sm:block">Handover</p>
+                              </div>
+
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Book Items Preview */}
                     <div className="p-5 sm:p-6 space-y-3">
                       <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
-                        Books In This Consignment ({order.total_items} Total)
+                        Books In This Consignment ({order.total_items || order.items?.length || 1} Total)
                       </p>
 
                       <div className="divide-y divide-slate-100">
-                        {order.items?.map((item, idx) => (
-                          <div key={idx} className="py-2.5 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="w-12 h-14 bg-slate-100 rounded-lg overflow-hidden border border-slate-200/80 p-1 flex items-center justify-center shrink-0">
-                                <img
-                                  src={getImageUrl(item.image)}
-                                  alt={item.name}
-                                  className="w-full h-full object-contain"
-                                  onError={(e) => {
-                                    e.target.src = '/images/ebook_logo.png';
-                                  }}
-                                />
+                        {order.items?.map((item, idx) => {
+                          const itemName = item.product_name || item.book_title || item.name || 'Competitive Exam Book';
+                          const itemQty = parseInt(item.qty || item.quantity || 1, 10);
+                          const itemPrice = parseFloat(item.price || 0);
+                          const itemImg = item.product_image || item.image;
+                          return (
+                            <div key={idx} className="py-2.5 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-12 h-14 bg-slate-100 rounded-lg overflow-hidden border border-slate-200/80 p-1 flex items-center justify-center shrink-0">
+                                  <img
+                                    src={getImageUrl(itemImg)}
+                                    alt={itemName}
+                                    className="w-full h-full object-contain"
+                                    onError={(e) => {
+                                      e.target.src = '/images/ebook_logo.png';
+                                    }}
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                                    {itemName}
+                                  </h4>
+                                  <p className="text-xs text-slate-500 font-mono">
+                                    Qty: {itemQty} &times; ₹{itemPrice.toFixed(2)}
+                                  </p>
+                                </div>
                               </div>
-                              <div className="min-w-0">
-                                <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                                  {item.book_title || item.name}
-                                </h4>
-                                <p className="text-xs text-slate-500 font-mono">
-                                  Qty: {item.quantity} &times; ₹{item.price.toFixed(2)}
-                                </p>
-                              </div>
-                            </div>
 
-                            <span className="font-extrabold text-xs sm:text-sm text-slate-900 shrink-0">
-                              ₹{(item.quantity * item.price).toFixed(2)}
-                            </span>
-                          </div>
-                        ))}
+                              <span className="font-extrabold text-xs sm:text-sm text-slate-900 shrink-0">
+                                ₹{(itemQty * itemPrice).toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
 
                       {/* Delivery Address Pill */}
@@ -445,7 +483,7 @@ export default function OrderTracking() {
                             Shipping Destination: {order.customer_name} ({order.customer_phone})
                           </p>
                           <p className="text-slate-500">
-                            {order.door_no ? `${order.door_no}, ` : ''}{order.address}{order.mandal ? `, ${order.mandal}` : ''}, {order.district}, {order.state} - {order.pincode}
+                            {[order.door_no, order.address, order.mandal, order.district, order.state].filter(Boolean).join(', ')}{order.pincode ? ` - ${order.pincode}` : ''}
                           </p>
                         </div>
                       </div>

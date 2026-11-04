@@ -111,6 +111,7 @@ export default function Navbar() {
     { label: 'All Books', path: '/shop' },
     { label: 'Publications', path: '/publications' },
     { label: 'About Us', path: '/about' },
+    { label: 'Track Order', path: '/tracking' },
     { label: 'Contact', path: '/contact' },
   ];
 
@@ -484,6 +485,22 @@ export default function Navbar() {
                   <div className="flex items-center gap-3">
                     <Info className="w-4 h-4 text-red-600" />
                     <span>About Us</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </Link>
+
+                <Link
+                  to="/tracking"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors ${
+                    location.pathname.startsWith('/tracking')
+                      ? 'bg-red-50 text-red-600 font-extrabold'
+                      : 'text-slate-800 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Truck className="w-4 h-4 text-red-600" />
+                    <span>Track Order</span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-400" />
                 </Link>

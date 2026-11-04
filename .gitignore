@@ -1,0 +1,34 @@
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+*.env
+**/.env
+
+# Node & Frontend
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.npm/
+
+# PHP & Laravel
+vendor/
+**/vendor/
+.phpactor.json
+.phpunit.result.cache
+/.fleet
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/public/build
+/public/hot
+/storage/*.key
+/storage/pail
+Homestead.json
+Homestead.yaml
+Thumbs.db

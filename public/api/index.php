@@ -130,18 +130,27 @@ if ($path === 'realtime/sync') {
     header('Cache-Control: no-cache, no-store, must-revalidate');
     
     $since = intval($_GET['since'] ?? 0);
-    $lastOrder = $pdo->query('SELECT id, order_code, total, status, order_status, UNIX_TIMESTAMP(updated_at) as updated_time FROM orders ORDER BY id DESC LIMIT 1')->fetch();
+    $lastId = intval($_GET['last_id'] ?? 0);
+
+    $lastOrder = $pdo->query('SELECT id, order_code, customer_name, total, status, order_status, UNIX_TIMESTAMP(updated_at) as updated_time, UNIX_TIMESTAMP(created_at) as created_time FROM orders ORDER BY id DESC LIMIT 1')->fetch();
     
     $hasNewOrder = false;
-    if ($lastOrder && intval($lastOrder['updated_time']) > $since && $since > 0) {
-        $hasNewOrder = true;
+    if ($lastOrder) {
+        $curId = intval($lastOrder['id']);
+        $upTime = intval($lastOrder['updated_time'] ?: $lastOrder['created_time']);
+        if ($lastId > 0 && $curId > $lastId) {
+            $hasNewOrder = true;
+        } elseif ($since > 0 && $upTime > $since) {
+            $hasNewOrder = true;
+        }
     }
 
     echo json_encode([
-        'success'   => true,
-        'timestamp' => time(),
-        'hasUpdate' => $hasNewOrder,
-        'lastOrder' => $lastOrder,
+        'success'     => true,
+        'timestamp'   => time(),
+        'lastId'      => $lastOrder ? intval($lastOrder['id']) : 0,
+        'hasUpdate'   => $hasNewOrder,
+        'lastOrder'   => $lastOrder,
     ]);
     exit;
 }

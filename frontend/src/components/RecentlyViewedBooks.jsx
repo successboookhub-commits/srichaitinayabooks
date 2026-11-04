@@ -47,3 +47,4 @@ export default function RecentlyViewedBooks({ excludeId, maxItems = 6, title = '
     </section>
   );
 }
+

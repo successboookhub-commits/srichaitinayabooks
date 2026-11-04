@@ -30,6 +30,7 @@ import {
   CartesianGrid
 } from 'recharts';
 import api from '../../services/api';
+import realtime from '../../services/realtime';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -38,11 +39,23 @@ export default function AdminDashboard() {
   const [chartView, setChartView] = useState('revenue'); // 'revenue' | 'orders'
 
   useEffect(() => {
-    fetchStats();
+    fetchStats(true);
+
+    const unsubNewOrder = realtime.on('new_order', () => {
+      fetchStats(false);
+    });
+    const unsubStore = realtime.on('store_updated', () => {
+      fetchStats(false);
+    });
+
+    return () => {
+      unsubNewOrder();
+      unsubStore();
+    };
   }, []);
 
-  const fetchStats = async () => {
-    setLoading(true);
+  const fetchStats = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const res = await api.get('/dashboard/stats');
       const data = res.data;
@@ -74,9 +87,9 @@ export default function AdminDashboard() {
         })),
       });
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load dashboard metrics.');
+      if (showSpinner) setError(err.response?.data?.message || 'Failed to load dashboard metrics.');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 

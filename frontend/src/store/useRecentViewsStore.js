@@ -42,3 +42,4 @@ export const useRecentViewsStore = create(
 );
 
 export default useRecentViewsStore;
+

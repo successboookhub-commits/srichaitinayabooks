@@ -26,6 +26,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import api from '../../services/api';
+import realtime, { playOrderChime } from '../../services/realtime';
 import AdminOrderLabel from './AdminOrderLabel';
 
 export default function AdminOrders() {
@@ -33,6 +34,10 @@ export default function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, totalPages: 1 });
   const [loading, setLoading] = useState(true);
+
+  // Live Real-Time Order Toast & Highlight State
+  const [liveToast, setLiveToast] = useState(null);
+  const [highlightOrderId, setHighlightOrderId] = useState(null);
 
   // Filters State
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -103,11 +108,13 @@ export default function AdminOrders() {
   };
 
   // Fetch orders from API with all active filters
-  const fetchOrders = async (page = 1) => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    const scrollContainer = document.querySelector('[data-scroll-container="true"]');
-    if (scrollContainer) scrollContainer.scrollTop = 0;
-    setLoading(true);
+  const fetchOrders = async (page = 1, showSpinner = true) => {
+    if (showSpinner) {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      const scrollContainer = document.querySelector('[data-scroll-container="true"]');
+      if (scrollContainer) scrollContainer.scrollTop = 0;
+      setLoading(true);
+    }
     setError('');
     try {
       const params = new URLSearchParams();
@@ -127,11 +134,46 @@ export default function AdminOrders() {
       });
     } catch (err) {
       console.error('Failed to load orders', err);
-      setError(err.response?.data?.message || 'Could not load orders from database.');
+      if (showSpinner) setError(err.response?.data?.message || 'Could not load orders from database.');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
+
+  // Real-Time Instant Live Orders (No Page Reload!)
+  useEffect(() => {
+    const unsubNewOrder = realtime.on('new_order', (newOrder) => {
+      // 1. Play soft synthesized order chime
+      playOrderChime();
+
+      // 2. Set live banner
+      setLiveToast({
+        code: newOrder.order_code,
+        customer: newOrder.customer_name || 'Customer',
+        total: parseFloat(newOrder.total || 0).toFixed(2),
+        time: new Date().toLocaleTimeString(),
+      });
+      setTimeout(() => setLiveToast(null), 9000);
+
+      // 3. Highlight the newly arrived order row in emerald green
+      if (newOrder.id) {
+        setHighlightOrderId(parseInt(newOrder.id, 10));
+        setTimeout(() => setHighlightOrderId(null), 6000);
+      }
+
+      // 4. Silently update orders table in background (Zero screen reload/flash!)
+      fetchOrders(1, false);
+    });
+
+    const unsubUpdate = realtime.on('store_updated', () => {
+      fetchOrders(pagination.page || 1, false);
+    });
+
+    return () => {
+      unsubNewOrder();
+      unsubUpdate();
+    };
+  }, [pagination.page]);
 
   // Sync state when URL searchParams change (e.g. from Dashboard click)
   useEffect(() => {
@@ -356,8 +398,9 @@ export default function AdminOrders() {
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               Orders Management
             </h1>
-            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-              Live DB
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Real-Time Sync Active</span>
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
@@ -441,6 +484,32 @@ export default function AdminOrders() {
 
         </div>
       </div>
+
+      {/* ================= LIVE NEW ORDER ALERT BANNER (Zero Page Reload!) ================= */}
+      {liveToast && (
+        <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white shadow-xl shadow-emerald-600/20 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-3 h-3 rounded-full bg-white animate-ping shrink-0" />
+            <div className="min-w-0">
+              <p className="font-black text-sm flex items-center gap-2 truncate">
+                <span>⚡ New Order Received: #{liveToast.code}</span>
+                <span className="text-emerald-200">•</span>
+                <span className="text-emerald-100">₹{liveToast.total}</span>
+              </p>
+              <p className="text-xs text-emerald-100/90 truncate">
+                Customer: <strong className="text-white">{liveToast.customer}</strong> • Received at {liveToast.time} — Table updated in real-time without reloading!
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setLiveToast(null)}
+            className="p-1.5 hover:bg-white/20 rounded-xl transition-colors cursor-pointer shrink-0"
+            title="Dismiss notification"
+          >
+            <X className="w-4 h-4 text-white" />
+          </button>
+        </div>
+      )}
 
       {/* ================= COMPREHENSIVE FILTER, DATE RANGE & SEARCH MASTER PANEL ================= */}
       <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs space-y-4">
@@ -784,12 +853,17 @@ export default function AdminOrders() {
                 orders.map((o) => {
                   const isChecked = selectedIds.includes(o.id);
                   const isUpdating = updatingId === o.id;
+                  const isNewLive = highlightOrderId === o.id;
 
                   return (
                     <tr
                       key={o.id}
-                      className={`hover:bg-slate-50/80 transition-colors ${
-                        isChecked ? 'bg-red-50/30' : ''
+                      className={`transition-all duration-500 ${
+                        isNewLive
+                          ? 'bg-emerald-100/90 ring-2 ring-emerald-500 font-bold shadow-md'
+                          : isChecked
+                          ? 'bg-red-50/30'
+                          : 'hover:bg-slate-50/80'
                       }`}
                     >
                       {/* Checkbox */}

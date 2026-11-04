@@ -93,7 +93,7 @@ export default function AdminOrderLabel({ orders, onClose }) {
                     </div>
                     <div className="flex justify-between py-1 text-sm font-black text-slate-900">
                       <span>Total Amount:</span>
-                      <span>₹{order.total_amount}</span>
+                      <span>₹{parseFloat(order.total || order.total_amount || 0).toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -114,8 +114,8 @@ export default function AdminOrderLabel({ orders, onClose }) {
                   {order.items && order.items.length > 0 ? (
                     order.items.map((it, i) => (
                       <div key={i} className="py-1 flex justify-between text-slate-700">
-                        <span>{it.book_title || it.name || 'Book'}</span>
-                        <span className="font-bold font-mono">Qty: {it.quantity}</span>
+                        <span>{it.product_name || it.book_title || it.name || 'Competitive Exam Book'}</span>
+                        <span className="font-bold font-mono">Qty: {it.qty || it.quantity || 1}</span>
                       </div>
                     ))
                   ) : (

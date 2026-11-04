@@ -273,7 +273,13 @@ export default function AdminOrders() {
   const handlePrintSingle = async (order) => {
     try {
       const res = await api.get(`/orders/${order.id}`);
-      const data = res.data?.order ? { ...res.data.order, items: res.data.items || [] } : res.data;
+      const orderData = res.data?.order || res.data || {};
+      const itemsData = orderData.items || res.data?.items || [];
+      const data = {
+        ...orderData,
+        items: itemsData,
+        total_amount: orderData.total || orderData.total_amount,
+      };
       setLabelsToPrint([data]);
     } catch (err) {
       setLabelsToPrint([order]);
@@ -307,8 +313,13 @@ export default function AdminOrders() {
   const viewOrderDetails = async (orderId) => {
     try {
       const res = await api.get(`/orders/${orderId}`);
-      const data = res.data?.order ? { ...res.data.order, items: res.data.items || [] } : res.data;
-      setSelectedOrderForDetails(data);
+      const orderData = res.data?.order || res.data || {};
+      const itemsData = orderData.items || res.data?.items || [];
+      setSelectedOrderForDetails({
+        ...orderData,
+        items: itemsData,
+        total_amount: orderData.total || orderData.total_amount,
+      });
     } catch (err) {
       alert('Failed to load full order details');
     }
@@ -1038,36 +1049,53 @@ export default function AdminOrders() {
               </div>
 
               <div>
-                <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] mb-2">
-                  Items Purchased:
+                <h4 className="font-bold text-slate-700 uppercase tracking-wider text-[11px] mb-2 flex items-center justify-between">
+                  <span>Items Purchased ({selectedOrderForDetails.items?.length || 0}):</span>
+                  {selectedOrderForDetails.payment_method && (
+                    <span className="text-[10px] bg-slate-200 text-slate-800 font-mono px-2 py-0.5 rounded font-bold uppercase">
+                      {selectedOrderForDetails.payment_method}
+                    </span>
+                  )}
                 </h4>
                 <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
-                  {selectedOrderForDetails.items?.map((it, idx) => (
-                    <div key={idx} className="p-3 flex justify-between items-center bg-slate-50/50">
-                      <div>
-                        <p className="font-bold text-slate-800">{it.book_title || it.name}</p>
-                        <p className="text-[11px] text-slate-500 font-mono">
-                          Qty: {it.quantity} &times; ₹{it.price}
-                        </p>
-                      </div>
-                      <span className="font-bold text-slate-900">₹{(it.quantity * it.price).toFixed(2)}</span>
+                  {selectedOrderForDetails.items && selectedOrderForDetails.items.length > 0 ? (
+                    selectedOrderForDetails.items.map((it, idx) => {
+                      const bookName = it.product_name || it.book_title || it.name || 'Book';
+                      const qty = parseInt(it.qty || it.quantity || 1, 10);
+                      const price = parseFloat(it.price || 0);
+                      const itemTotal = parseFloat(it.total || (qty * price)).toFixed(2);
+                      return (
+                        <div key={idx} className="p-3 flex justify-between items-center bg-slate-50/50">
+                          <div>
+                            <p className="font-bold text-slate-800 text-xs sm:text-sm">{bookName}</p>
+                            <p className="text-[11px] text-slate-500 font-mono">
+                              Qty: {qty} &times; ₹{price.toFixed(2)}
+                            </p>
+                          </div>
+                          <span className="font-extrabold text-slate-900 text-xs sm:text-sm">₹{itemTotal}</span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-4 text-center text-slate-400 text-xs italic">
+                      No items found for this order.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
               <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal</span>
-                  <span>₹{selectedOrderForDetails.subtotal || selectedOrderForDetails.total_amount}</span>
+                  <span>₹{parseFloat(selectedOrderForDetails.subtotal || selectedOrderForDetails.total || selectedOrderForDetails.total_amount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
                   <span>Shipping Fee</span>
-                  <span>₹{selectedOrderForDetails.shipping || selectedOrderForDetails.shipping_fee || 0}</span>
+                  <span>₹{parseFloat(selectedOrderForDetails.shipping || selectedOrderForDetails.shipping_fee || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-black text-sm text-slate-900 pt-1.5 border-t border-slate-200">
                   <span>Total Amount</span>
-                  <span className="text-red-600">₹{selectedOrderForDetails.total_amount}</span>
+                  <span className="text-red-600 font-extrabold">₹{parseFloat(selectedOrderForDetails.total || selectedOrderForDetails.total_amount || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>

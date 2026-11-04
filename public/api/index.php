@@ -1833,10 +1833,16 @@ if (preg_match('#^orders/(\d+)$#', $path, $m)) {
         $stmt->execute([$orderId]);
         $order = $stmt->fetch();
         if ($order) {
-            $itemStmt = $pdo->prepare('SELECT oi.*, p.name AS product_name, p.main_photo AS product_image FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?');
+            $itemStmt = $pdo->prepare('SELECT oi.*, oi.product_name AS name, oi.product_name AS book_title, oi.qty AS quantity, p.main_photo AS product_image, p.main_photo AS image FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?');
             $itemStmt->execute([$order['id']]);
-            $order['items'] = $itemStmt->fetchAll();
-            echo json_encode(['success' => true, 'order' => $order]);
+            $items = $itemStmt->fetchAll();
+            $order['items'] = $items;
+            $order['total_amount'] = $order['total'];
+            echo json_encode([
+                'success' => true,
+                'order'   => $order,
+                'items'   => $items
+            ]);
         } else {
             http_response_code(404);
             echo json_encode(['success' => false, 'message' => 'Order not found.']);

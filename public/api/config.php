@@ -23,11 +23,16 @@ function getDbConfig() {
         'jwt_secret' => 'srichaitanya_super_secure_jwt_secret_key_2026_xyz'
     ];
 
-    // Read backend/.env if available
+    // Read backend/.env or backend/.env.example if available
     $envPaths = [
         dirname(__DIR__, 2) . '/backend/.env',
+        dirname(__DIR__, 2) . '/backend/.env.example',
         dirname(__DIR__, 1) . '/.env',
-        __DIR__ . '/.env'
+        dirname(__DIR__, 1) . '/.env.example',
+        dirname(__DIR__, 2) . '/.env',
+        dirname(__DIR__, 2) . '/.env.example',
+        __DIR__ . '/.env',
+        __DIR__ . '/.env.example',
     ];
 
     foreach ($envPaths as $envPath) {
@@ -77,7 +82,14 @@ function getDb() {
         echo json_encode([
             'success' => false,
             'message' => 'Database connection failed: ' . $e->getMessage(),
-            'hint' => 'Please ensure DB_PASSWORD is set correctly in backend/.env on Hostinger'
+            'debug'   => [
+                'host'        => $cfg['host'],
+                'database'    => $cfg['name'],
+                'user'        => $cfg['user'],
+                'pass_set'    => !empty($cfg['pass']),
+                'pass_length' => strlen($cfg['pass']),
+            ],
+            'hint' => 'Please set DB_PASSWORD in backend/.env or backend/.env.example on Hostinger'
         ]);
         exit;
     }

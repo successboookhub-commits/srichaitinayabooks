@@ -8,6 +8,9 @@ DirectoryIndex index.html index.php
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
+    # Route /api/ calls directly to PHP API handler
+    RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+
     # If the file or directory exists, serve it directly (CSS, JS, images, storage)
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d

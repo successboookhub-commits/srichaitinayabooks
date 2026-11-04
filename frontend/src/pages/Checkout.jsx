@@ -34,21 +34,72 @@ export default function Checkout() {
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (errorMessage) setErrorMessage('');
+  };
+
+  // Strictly NUMBERS ONLY with max 10 digits
+  const handlePhoneChange = (e) => {
+    const numbersOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+    setFormData((prev) => ({ ...prev, phone: numbersOnly }));
+    if (errorMessage) setErrorMessage('');
+  };
+
+  // Strictly NUMBERS ONLY with max 6 digits
+  const handlePincodeChange = (e) => {
+    const numbersOnly = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setFormData((prev) => ({ ...prev, pincode: numbersOnly }));
+    if (errorMessage) setErrorMessage('');
   };
 
   const handlePayment = async (e) => {
     e.preventDefault();
     setErrorMessage('');
 
-    // Phone validation
+    // 1. Phone validation: Strictly 10 digits numbers only
     const cleanPhone = formData.phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      setErrorMessage('Please enter a valid 10-digit mobile number.');
+    if (cleanPhone.length !== 10) {
+      setErrorMessage('Mobile Number must be exactly 10 digits (Numbers only).');
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      setErrorMessage('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.');
       return;
     }
 
-    if (!formData.name || !formData.address || !formData.pincode) {
-      setErrorMessage('Please fill in all required shipping address fields.');
+    // 2. Pincode validation: Strictly 6 digits numbers only
+    const cleanPincode = formData.pincode.replace(/\D/g, '');
+    if (cleanPincode.length !== 6) {
+      setErrorMessage('Pincode must be exactly 6 digits (Numbers only).');
+      return;
+    }
+
+    // 3. Name validation
+    if (!formData.name.trim() || formData.name.trim().length < 2) {
+      setErrorMessage('Please enter your Full Name.');
+      return;
+    }
+
+    // 4. Address validation
+    if (!formData.door_no.trim()) {
+      setErrorMessage('Please enter Flat / Door No.');
+      return;
+    }
+    if (!formData.address.trim() || formData.address.trim().length < 3) {
+      setErrorMessage('Please enter Street / Colony / Landmark.');
+      return;
+    }
+    if (!formData.district.trim()) {
+      setErrorMessage('Please enter District.');
+      return;
+    }
+    if (!formData.state.trim()) {
+      setErrorMessage('Please enter State.');
+      return;
+    }
+
+    // 5. Email validation (if provided)
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      setErrorMessage('Please enter a valid Email Address or leave it blank.');
       return;
     }
 
@@ -59,7 +110,7 @@ export default function Checkout() {
       try {
         const orderRes = await api.post('/orders', {
           cart,
-          checkoutData: { ...formData, phone: cleanPhone },
+          checkoutData: { ...formData, phone: cleanPhone, pincode: cleanPincode },
           payment_method: 'COD',
         });
 
@@ -103,7 +154,7 @@ export default function Checkout() {
       // 1. Create Razorpay order on backend
       const orderRes = await api.post('/checkout/pay', {
         cart,
-        checkoutData: { ...formData, phone: cleanPhone },
+        checkoutData: { ...formData, phone: cleanPhone, pincode: cleanPincode },
       });
 
       if (!orderRes.data.success) {
@@ -138,7 +189,7 @@ export default function Checkout() {
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
               cart,
-              checkoutData: { ...formData, phone: cleanPhone },
+              checkoutData: { ...formData, phone: cleanPhone, pincode: cleanPincode },
             });
 
             if (verifyRes.data.success) {
@@ -231,15 +282,40 @@ export default function Checkout() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Mobile Number (WhatsApp) *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-gray-700">Mobile Number (WhatsApp) *</label>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-all ${
+                      formData.phone.length === 10
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : formData.phone.length > 0
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                        : 'text-gray-400'
+                    }`}>
+                      {formData.phone.length === 10 ? '✓ 10 Digits (Valid)' : `${formData.phone.length}/10 digits`}
+                    </span>
+                  </div>
                   <input
                     type="tel"
                     name="phone"
                     required
+                    maxLength={10}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={formData.phone}
-                    onChange={handleChange}
+                    onChange={handlePhoneChange}
+                    onKeyDown={(e) => {
+                      if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Tab') {
+                        e.preventDefault();
+                      }
+                    }}
                     placeholder="10-digit mobile number"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-600"
+                    className={`w-full bg-gray-50 border rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none transition-all ${
+                      formData.phone.length === 10
+                        ? 'border-emerald-500 bg-emerald-50/20 text-gray-900 focus:border-emerald-600'
+                        : formData.phone.length > 0
+                        ? 'border-amber-400 focus:border-amber-500'
+                        : 'border-gray-200 focus:border-blue-600'
+                    }`}
                   />
                 </div>
               </div>
@@ -320,15 +396,40 @@ export default function Checkout() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Pincode *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-gray-700">Pincode *</label>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-all ${
+                      formData.pincode.length === 6
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : formData.pincode.length > 0
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                        : 'text-gray-400'
+                    }`}>
+                      {formData.pincode.length === 6 ? '✓ 6 Digits (Valid)' : `${formData.pincode.length}/6 digits`}
+                    </span>
+                  </div>
                   <input
                     type="text"
                     name="pincode"
                     required
+                    maxLength={6}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={formData.pincode}
-                    onChange={handleChange}
+                    onChange={handlePincodeChange}
+                    onKeyDown={(e) => {
+                      if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Tab') {
+                        e.preventDefault();
+                      }
+                    }}
                     placeholder="6 digits"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-600"
+                    className={`w-full bg-gray-50 border rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none transition-all ${
+                      formData.pincode.length === 6
+                        ? 'border-emerald-500 bg-emerald-50/20 text-gray-900 focus:border-emerald-600'
+                        : formData.pincode.length > 0
+                        ? 'border-amber-400 focus:border-amber-500'
+                        : 'border-gray-200 focus:border-blue-600'
+                    }`}
                   />
                 </div>
               </div>

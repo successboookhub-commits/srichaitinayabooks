@@ -949,6 +949,20 @@ if ($path === 'checkout/pay' && $method === 'POST') {
         exit;
     }
 
+    // Strict Phone & Pincode Validation
+    $phone = preg_replace('/\D/', '', (string)($checkoutData['phone'] ?? ''));
+    $pincode = preg_replace('/\D/', '', (string)($checkoutData['pincode'] ?? ''));
+    if (strlen($phone) !== 10) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Mobile number must be exactly 10 digits (Numbers only).']);
+        exit;
+    }
+    if (strlen($pincode) !== 6) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Pincode must be exactly 6 digits (Numbers only).']);
+        exit;
+    }
+
     // Validate active products & sufficient inventory
     foreach ($cart as $item) {
         $stmt = $pdo->prepare('SELECT id, name, quantity, is_active FROM products WHERE id = ? LIMIT 1');
@@ -1079,6 +1093,17 @@ if ($path === 'checkout/verify' && $method === 'POST') {
     }
 
     $phone = preg_replace('/\D/', '', (string)($checkoutData['phone'] ?? ''));
+    $pincode = preg_replace('/\D/', '', (string)($checkoutData['pincode'] ?? ''));
+    if (strlen($phone) !== 10) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Mobile number must be exactly 10 digits (Numbers only).']);
+        exit;
+    }
+    if (strlen($pincode) !== 6) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Pincode must be exactly 6 digits (Numbers only).']);
+        exit;
+    }
     $name = trim($checkoutData['name'] ?? 'Customer');
     $email = strtolower(trim($checkoutData['email'] ?? ''));
     $state = trim($checkoutData['state'] ?? 'Telangana');
@@ -1086,7 +1111,6 @@ if ($path === 'checkout/verify' && $method === 'POST') {
     $mandal = trim($checkoutData['mandal'] ?? '');
     $doorNo = trim($checkoutData['door_no'] ?? '');
     $address = trim($checkoutData['address'] ?? '');
-    $pincode = trim($checkoutData['pincode'] ?? '');
 
     $pdo->beginTransaction();
     try {
@@ -1203,6 +1227,17 @@ if ($path === 'orders') {
         }
 
         $phone = preg_replace('/\D/', '', (string)($checkoutData['phone'] ?? ''));
+        $pincode = preg_replace('/\D/', '', (string)($checkoutData['pincode'] ?? ''));
+        if (strlen($phone) !== 10) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Mobile number must be exactly 10 digits (Numbers only).']);
+            exit;
+        }
+        if (strlen($pincode) !== 6) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Pincode must be exactly 6 digits (Numbers only).']);
+            exit;
+        }
         $name = trim($checkoutData['name'] ?? 'Customer');
         $email = strtolower(trim($checkoutData['email'] ?? ''));
         $state = trim($checkoutData['state'] ?? 'Telangana');
@@ -1210,7 +1245,6 @@ if ($path === 'orders') {
         $mandal = trim($checkoutData['mandal'] ?? '');
         $doorNo = trim($checkoutData['door_no'] ?? '');
         $address = trim($checkoutData['address'] ?? '');
-        $pincode = trim($checkoutData['pincode'] ?? '');
 
         $pdo->beginTransaction();
         try {

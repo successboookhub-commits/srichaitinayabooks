@@ -986,12 +986,26 @@ if ($path === 'checkout/pay' && $method === 'POST') {
 
     $receipt = 'ORD-' . strtoupper(substr(uniqid(), -8));
 
-    // Try creating Razorpay Order via cURL
-    $rzpOrder = null;
-    $rzpKey = getenv('RAZORPAY_KEY') ?: 'rzp_live_SIJDGxy85sgrKV';
-    $rzpSecret = getenv('RAZORPAY_SECRET') ?: 'gj9CI3Dq9wKU5dapQR61Vyo3';
+    // Razorpay Order Creation via cURL
+    $rzpCfg = getRazorpayConfig();
+    $rzpKey = $rzpCfg['key'];
+    $rzpSecret = $rzpCfg['secret'];
 
-    if (function_exists('curl_init') && !empty($rzpKey) && !empty($rzpSecret)) {
+    if (empty($rzpKey) || empty($rzpSecret)) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Razorpay API credentials are not configured on the server.',
+        ]);
+        exit;
+    }
+
+    $rzpOrder = null;
+    $curlErr = '';
+    $httpCode = 0;
+    $resp = '';
+
+    if (function_exists('curl_init')) {
         $ch = curl_init('https://api.razorpay.com/v1/orders');
         curl_setopt($ch, CURLOPT_USERPWD, $rzpKey . ':' . $rzpSecret);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -1000,19 +1014,51 @@ if ($path === 'checkout/pay' && $method === 'POST') {
             'amount'   => $amountInPaise,
             'currency' => 'INR',
             'receipt'  => $receipt,
+            'notes'    => [
+                'customer_name'  => $checkoutData['name'] ?? '',
+                'customer_phone' => $phone,
+                'customer_email' => $checkoutData['email'] ?? '',
+            ],
         ]));
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         $resp = curl_exec($ch);
+        $curlErr = curl_error($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        if ($httpCode >= 200 && $httpCode < 300) {
+        if ($httpCode >= 200 && $httpCode < 300 && !empty($resp)) {
             $rzpOrder = json_decode($resp, true);
         }
+    } else {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'PHP cURL extension is required for payment gateway operations.',
+        ]);
+        exit;
     }
 
-    $orderId = $rzpOrder['id'] ?? ('order_' . uniqid());
+    if (empty($rzpOrder['id'])) {
+        $errMsg = 'Failed to create payment order.';
+        if (!empty($rzpOrder['error']['description'])) {
+            $errMsg = $rzpOrder['error']['description'];
+        } elseif (!empty($curlErr)) {
+            $errMsg = 'Payment Gateway cURL Error: ' . $curlErr;
+        } elseif ($httpCode > 0) {
+            $errMsg = 'Payment Gateway returned HTTP ' . $httpCode . ' (' . substr((string)$resp, 0, 150) . ')';
+        }
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => $errMsg,
+        ]);
+        exit;
+    }
+
+    $orderId = $rzpOrder['id'];
 
     // Save pending checkout session to disk cache
     $cacheDir = dirname(__DIR__) . '/storage/checkouts';
@@ -1059,14 +1105,15 @@ if ($path === 'checkout/verify' && $method === 'POST') {
     }
 
     // Verify HMAC-SHA256 signature if signature was provided
-    $rzpSecret = getenv('RAZORPAY_SECRET') ?: 'gj9CI3Dq9wKU5dapQR61Vyo3';
+    $rzpCfg = getRazorpayConfig();
+    $rzpSecret = $rzpCfg['secret'];
     if (!empty($rzpOrderId) && !empty($rzpPaymentId) && !empty($rzpSig)) {
         $expectedSig = hash_hmac('sha256', $rzpOrderId . '|' . $rzpPaymentId, $rzpSecret);
         if ($expectedSig !== $rzpSig) {
             http_response_code(400);
             echo json_encode([
                 'success' => false,
-                'message' => 'Payment verification failed. Please contact support with Payment ID: ' . $rzpPaymentId,
+                'message' => 'Payment verification failed (signature mismatch). Please contact support with Payment ID: ' . $rzpPaymentId,
             ]);
             exit;
         }

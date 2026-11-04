@@ -4,26 +4,17 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
 
-// Helper to load DB config
-function getDbConfig() {
-    $isLocal = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1', 'localhost:5000', 'localhost:5173']);
-    
-    // Default Hostinger settings
-    $config = [
-        'host' => $isLocal ? '127.0.0.1' : 'localhost',
-        'port' => '3306',
-        'user' => $isLocal ? 'root' : 'u803044110_sri_user',
-        'pass' => '', // Will be read from backend/.env or can be set here
-        'name' => $isLocal ? 'u302322072_bookcom123' : 'u803044110_srichaitanya',
-        'jwt_secret' => 'srichaitanya_super_secure_jwt_secret_key_2026_xyz'
-    ];
+// Load Environment Variables from potential locations
+function loadEnvVariables() {
+    static $env = null;
+    if ($env !== null) return $env;
 
-    // Read backend/.env or backend/.env.example if available
+    $env = [];
     $envPaths = [
         dirname(__DIR__, 2) . '/backend/.env',
         dirname(__DIR__, 2) . '/backend/.env.example',
@@ -45,17 +36,41 @@ function getDbConfig() {
                     [$k, $v] = explode('=', $line, 2);
                     $k = trim($k);
                     $v = trim($v, " \t\n\r\0\x0B\"'");
-                    if ($k === 'DB_HOST') $config['host'] = $v;
-                    if ($k === 'DB_PORT') $config['port'] = $v;
-                    if ($k === 'DB_USER') $config['user'] = $v;
-                    if ($k === 'DB_PASSWORD') $config['pass'] = $v;
-                    if ($k === 'DB_NAME') $config['name'] = $v;
-                    if ($k === 'JWT_SECRET') $config['jwt_secret'] = $v;
+                    if (!isset($env[$k])) {
+                        $env[$k] = $v;
+                    }
                 }
             }
-            break;
         }
     }
+    return $env;
+}
+
+// Razorpay Live Configuration Helper
+function getRazorpayConfig() {
+    $env = loadEnvVariables();
+    $key = !empty($env['RAZORPAY_KEY']) ? $env['RAZORPAY_KEY'] : (getenv('RAZORPAY_KEY') ?: 'rzp_live_SIJDGxy85sgrKV');
+    $secret = !empty($env['RAZORPAY_SECRET']) ? $env['RAZORPAY_SECRET'] : (getenv('RAZORPAY_SECRET') ?: 'gj9CI3Dq9wKU5dapQR61Vyo3');
+    return [
+        'key'    => trim($key),
+        'secret' => trim($secret),
+    ];
+}
+
+// Helper to load DB config
+function getDbConfig() {
+    $isLocal = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1', 'localhost:5000', 'localhost:5173']);
+    $env = loadEnvVariables();
+
+    // Default Hostinger settings
+    $config = [
+        'host' => $isLocal ? '127.0.0.1' : ($env['DB_HOST'] ?? 'localhost'),
+        'port' => $env['DB_PORT'] ?? '3306',
+        'user' => $isLocal ? 'root' : ($env['DB_USER'] ?? 'u803044110_sri_user'),
+        'pass' => $env['DB_PASSWORD'] ?? '',
+        'name' => $isLocal ? 'u302322072_bookcom123' : ($env['DB_NAME'] ?? 'u803044110_srichaitanya'),
+        'jwt_secret' => $env['JWT_SECRET'] ?? 'srichaitanya_super_secure_jwt_secret_key_2026_xyz'
+    ];
 
     return $config;
 }

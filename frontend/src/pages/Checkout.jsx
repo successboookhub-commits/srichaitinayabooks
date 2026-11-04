@@ -4,6 +4,22 @@ import { ShieldCheck, Lock, AlertCircle, ArrowLeft, Loader2 } from 'lucide-react
 import { useCartStore } from '../store/useCartStore.js';
 import api from '../services/api.js';
 
+// Dynamically load Razorpay SDK if not already loaded
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
 export default function Checkout() {
   const navigate = useNavigate();
   const { cart, subtotal, shipping, total, clearCart, calculateLiveTotals } = useCartStore();
@@ -144,8 +160,9 @@ export default function Checkout() {
     }
 
     // ONLINE RAZORPAY PAYMENT FLOW
-    if (!window.Razorpay) {
-      setErrorMessage('Razorpay SDK failed to load. Please switch to "Cash on Delivery" or check your internet.');
+    const isLoaded = await loadRazorpayScript();
+    if (!isLoaded || !window.Razorpay) {
+      setErrorMessage('Razorpay payment gateway failed to load. Please check your internet connection or try Cash on Delivery.');
       setIsProcessing(false);
       return;
     }
@@ -157,8 +174,8 @@ export default function Checkout() {
         checkoutData: { ...formData, phone: cleanPhone, pincode: cleanPincode },
       });
 
-      if (!orderRes.data.success) {
-        setErrorMessage(orderRes.data.message || 'Payment initiation failed.');
+      if (!orderRes.data.success || !orderRes.data.order_id) {
+        setErrorMessage(orderRes.data.message || 'Payment initiation failed. Please try again.');
         setIsProcessing(false);
         return;
       }
@@ -172,6 +189,7 @@ export default function Checkout() {
         currency: 'INR',
         name: 'Sri Chaitanya Book Centre',
         description: `Order Payment for ${cart.length} item(s)`,
+        image: 'https://srichaitanya.successbookhub.com/favicon.svg',
         order_id,
         prefill: {
           name: formData.name,
@@ -179,7 +197,7 @@ export default function Checkout() {
           contact: cleanPhone,
         },
         theme: {
-          color: '#2563eb',
+          color: '#d72c35',
         },
         handler: async function (response) {
           try {
@@ -214,7 +232,7 @@ export default function Checkout() {
               setIsProcessing(false);
             }
           } catch (err) {
-            console.error(err);
+            console.error('Payment verification error:', err);
             setErrorMessage('Something went wrong confirming your order. Please contact support with Payment ID: ' + response.razorpay_payment_id);
             setIsProcessing(false);
           }
@@ -227,6 +245,12 @@ export default function Checkout() {
       };
 
       const razor = new window.Razorpay(options);
+      razor.on('payment.failed', function (resp) {
+        console.error('Razorpay payment failed:', resp.error);
+        const reason = resp.error?.description || resp.error?.reason || 'Payment was unsuccessful or cancelled. Please try again.';
+        setErrorMessage(reason);
+        setIsProcessing(false);
+      });
       razor.open();
 
     } catch (err) {

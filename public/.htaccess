@@ -11,10 +11,13 @@ DirectoryIndex index.html index.php
     # Route /api/ calls directly to PHP API handler
     RewriteRule ^api/(.*)$ api/index.php [QSA,L]
 
-    # If the file or directory exists, serve it directly (CSS, JS, images, storage)
+    # If the file or directory exists locally, serve it directly (CSS, JS, images, storage)
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
+
+    # If a storage file (book cover/banner) is missing locally, fallback to main site
+    RewriteRule ^storage/(.*)$ https://successbookhub.com/storage/$1 [R=302,L]
 
     # React Single Page Application (SPA) routing: send all other requests to index.html
     RewriteRule ^ index.html [L]

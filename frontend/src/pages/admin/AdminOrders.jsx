@@ -133,6 +133,18 @@ export default function AdminOrders() {
     }
   };
 
+  // Sync state when URL searchParams change (e.g. from Dashboard click)
+  useEffect(() => {
+    const s = searchParams.get('status') || '';
+    const df = searchParams.get('date_from') || '';
+    const dt = searchParams.get('date_to') || '';
+    const q = searchParams.get('search') || '';
+    setStatusFilter(s);
+    setDateFrom(df);
+    setDateTo(dt);
+    setSearch(q);
+  }, [searchParams]);
+
   // Re-fetch whenever filters change
   useEffect(() => {
     fetchOrders(1);
@@ -150,12 +162,18 @@ export default function AdminOrders() {
     setDateFrom('');
     setDateTo('');
     setSelectedIds([]);
+    setSearchParams({});
   };
 
   // Quick Date Preset Chips Handler
   const handleQuickPreset = (preset) => {
     const today = new Date();
-    const formatDate = (d) => d.toISOString().split('T')[0];
+    const formatDate = (d) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
 
     if (preset === 'today') {
       const dStr = formatDate(today);

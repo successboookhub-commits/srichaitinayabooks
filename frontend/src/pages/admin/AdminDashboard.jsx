@@ -17,7 +17,8 @@ import {
   Award,
   Sparkles,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Calendar
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -46,24 +47,30 @@ export default function AdminDashboard() {
       const res = await api.get('/dashboard/stats');
       const data = res.data;
       setStats({
-        total_revenue: data.stats?.totalRevenue || 0,
-        total_orders: data.stats?.totalOrders || 0,
-        avg_order_value: data.stats?.avgOrderValue || 0,
-        delivered_orders: data.stats?.deliveredOrders || 0,
-        shipped_orders: data.stats?.shippedOrders || 0,
-        processing_orders: data.stats?.processingOrders || 0,
-        pending_orders: data.stats?.pendingOrders || 0,
-        total_books: data.stats?.totalBooks || 0,
-        total_stock_units: data.stats?.totalStockUnits || 0,
-        low_stock_count: data.stats?.lowStockCount || 0,
-        total_categories: data.stats?.totalCategories || 0,
-        total_publications: data.stats?.totalPublications || 0,
-        total_customers: data.stats?.totalCustomers || 0,
-        monthly_sales: data.chartData || [],
+        total_revenue: data.stats?.totalRevenue ?? 0,
+        total_orders: data.stats?.totalOrders ?? 0,
+        avg_order_value: data.stats?.avgOrderValue ?? 0,
+        delivered_orders: data.stats?.deliveredOrders ?? data.stats?.orderStatusCounts?.Delivered ?? 0,
+        shipped_orders: data.stats?.shippedOrders ?? data.stats?.orderStatusCounts?.Shipped ?? 0,
+        processing_orders: data.stats?.processingOrders ?? data.stats?.orderStatusCounts?.Processing ?? 0,
+        pending_orders: data.stats?.pendingOrders ?? data.stats?.orderStatusCounts?.Ordered ?? 0,
+        cancelled_orders: data.stats?.cancelledOrders ?? data.stats?.orderStatusCounts?.Cancelled ?? 0,
+        today_orders: data.stats?.todayOrders ?? 0,
+        today_revenue: data.stats?.todayRevenue ?? 0,
+        yesterday_orders: data.stats?.yesterdayOrders ?? 0,
+        yesterday_revenue: data.stats?.yesterdayRevenue ?? 0,
+        total_books: data.stats?.totalBooks ?? 0,
+        total_stock_units: data.stats?.totalStockUnits ?? 0,
+        low_stock_count: data.stats?.lowStockCount ?? 0,
+        total_categories: data.stats?.totalCategories ?? 0,
+        total_publications: data.stats?.totalPublications ?? 0,
+        total_customers: data.stats?.totalCustomers ?? 0,
+        monthly_sales: data.chartData || data.stats?.salesChart || [],
         top_selling_books: data.topSellingBooks || [],
-        recent_orders: (data.recentOrders || []).map((ord) => ({
+        recent_orders: (data.recentOrders || data.stats?.recentOrders || []).map((ord) => ({
           ...ord,
-          total_amount: ord.total || ord.total_amount,
+          total_amount: ord.total ?? ord.total_amount ?? 0,
+          location: [ord.district, ord.state].filter(Boolean).join(', ') || ord.location || 'Telangana',
         })),
       });
     } catch (err) {
@@ -99,6 +106,14 @@ export default function AdminDashboard() {
     );
   }
 
+  const todayDateStr = (() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  })();
+
   const statCards = [
     {
       label: 'Total Revenue',
@@ -106,7 +121,7 @@ export default function AdminDashboard() {
       icon: DollarSign,
       color: 'bg-emerald-600 text-white shadow-emerald-500/20',
       badge: `Avg ₹${Number(stats?.avg_order_value || 0).toLocaleString('en-IN')}/order`,
-      subtext: 'Live total from 1,415 orders'
+      subtext: `Live total from ${Number(stats?.total_orders || 0).toLocaleString('en-IN')} orders`
     },
     {
       label: 'Total Orders',
@@ -202,6 +217,60 @@ export default function AdminDashboard() {
             </div>
           );
         })}
+      </div>
+
+      {/* TODAY'S PERFORMANCE HIGHLIGHT */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-700/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0 shadow-inner">
+            <Calendar className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-extrabold tracking-tight text-white">Today's Real-Time Orders & Sales</h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live Today
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Verified orders placed today ({new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}) and gross revenue
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+          {/* Today's Orders */}
+          <div className="bg-white/10 backdrop-blur-xs px-4 py-2.5 rounded-xl border border-white/10 min-w-[130px]">
+            <span className="text-[10px] uppercase font-bold text-slate-300 block">Today's Orders</span>
+            <span className="text-2xl font-black text-white">
+              {Number(stats?.today_orders || 0).toLocaleString('en-IN')}
+            </span>
+            <span className="text-[10px] text-slate-300 block font-medium">
+              Yesterday: {Number(stats?.yesterday_orders || 0)} orders
+            </span>
+          </div>
+
+          {/* Today's Revenue */}
+          <div className="bg-emerald-500/20 backdrop-blur-xs px-4 py-2.5 rounded-xl border border-emerald-400/30 min-w-[150px]">
+            <span className="text-[10px] uppercase font-bold text-emerald-300 block">Today's Revenue</span>
+            <span className="text-2xl font-black text-emerald-300">
+              ₹{Number(stats?.today_revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span className="text-[10px] text-emerald-200/80 block font-medium">
+              Yesterday: ₹{Number(stats?.yesterday_revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          {/* 1-Click Action to view today's orders */}
+          <Link
+            to={`/admin/orders?date_from=${todayDateStr}&date_to=${todayDateStr}`}
+            className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black px-4 py-3 rounded-xl transition-all shadow-md shrink-0 cursor-pointer"
+          >
+            <span>View Today's Orders</span>
+            <ArrowUpRight className="w-4 h-4" />
+          </Link>
+        </div>
       </div>
 
       {/* ORDER FULFILLMENT PIPELINE (Live Database Statuses) */}

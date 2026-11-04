@@ -46,14 +46,20 @@ function loadEnvVariables() {
     return $env;
 }
 
-// Razorpay Live Configuration Helper
+// Razorpay Configuration Helper (Active: TEST MODE per user request)
+// Live Mode Credentials (saved for quick toggle when user requests):
+// $liveKey = 'rzp_live_SIJDGxy85sgrKV';
+// $liveSecret = 'gj9CI3Dq9wKU5dapQR61Vyo3';
+
 function getRazorpayConfig() {
-    $env = loadEnvVariables();
-    $key = !empty($env['RAZORPAY_KEY']) ? $env['RAZORPAY_KEY'] : (getenv('RAZORPAY_KEY') ?: 'rzp_live_SIJDGxy85sgrKV');
-    $secret = !empty($env['RAZORPAY_SECRET']) ? $env['RAZORPAY_SECRET'] : (getenv('RAZORPAY_SECRET') ?: 'gj9CI3Dq9wKU5dapQR61Vyo3');
+    // ACTIVE: Test Mode credentials directly in code
+    $testKey = 'rzp_test_SwedUUn1KgRMs0';
+    $testSecret = 'xdW2Ry7T67sUK4zMKb3oOsZh';
+
     return [
-        'key'    => trim($key),
-        'secret' => trim($secret),
+        'key'    => $testKey,
+        'secret' => $testSecret,
+        'mode'   => 'test',
     ];
 }
 

@@ -8,18 +8,25 @@ import {
   ArrowRight,
   Check,
   Phone,
-  MessageSquare,
+  MessageCircle,
   Sparkles,
   PackageCheck,
   BookOpen,
   Share2,
   Clock,
   Layers,
-  Award
+  Award,
+  Heart,
+  MapPin,
+  Calendar
 } from 'lucide-react';
 import api, { getImageUrl } from '../services/api.js';
 import { useCartStore } from '../store/useCartStore.js';
+import { useWishlistStore } from '../store/useWishlistStore.js';
+import { useRecentViewsStore } from '../store/useRecentViewsStore.js';
 import ProductCard from '../components/ProductCard.jsx';
+import RecentlyViewedBooks from '../components/RecentlyViewedBooks.jsx';
+import { detectProductMedium, getMediumBadge } from '../utils/mediumDetector.js';
 
 export default function ProductDetail() {
   const { id, slug: paramSlug } = useParams();
@@ -32,8 +39,15 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [addedToast, setAddedToast] = useState(false);
 
+  // Pincode Delivery Estimator State
+  const [pincode, setPincode] = useState(() => localStorage.getItem('sc_user_pincode') || '');
+  const [pincodeResult, setPincodeResult] = useState(null);
+  const [pincodeError, setPincodeError] = useState('');
+
   const addItem = useCartStore((state) => state.addItem);
   const setDrawerOpen = useCartStore((state) => state.setDrawerOpen);
+  const { toggleWishlist, isInWishlist } = useWishlistStore();
+  const addViewedProduct = useRecentViewsStore((state) => state.addViewedProduct);
 
   useEffect(() => {
     async function loadProduct() {
@@ -42,9 +56,13 @@ export default function ProductDetail() {
       try {
         const res = await api.get(`/products/${slug}`);
         if (res.data.success) {
-          setProduct(res.data.product);
+          const prod = res.data.product;
+          setProduct(prod);
           setRelatedProducts(res.data.relatedProducts || []);
-          setActiveImage(res.data.product.main_photo || res.data.product.image);
+          setActiveImage(prod.main_photo || prod.image);
+
+          // Track in Recently Viewed store
+          addViewedProduct(prod);
         }
       } catch (err) {
         console.error(err);
@@ -55,6 +73,62 @@ export default function ProductDetail() {
     loadProduct();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [slug]);
+
+  // Run initial pincode estimate if pincode already stored
+  useEffect(() => {
+    if (pincode && pincode.trim().length === 6) {
+      calculateDelivery(pincode.trim());
+    }
+  }, []);
+
+  const calculateDelivery = (code) => {
+    const clean = code.trim();
+    if (!/^[1-9][0-9]{5}$/.test(clean)) {
+      setPincodeError('Please enter a valid 6-digit Indian PIN code.');
+      setPincodeResult(null);
+      return;
+    }
+
+    setPincodeError('');
+    localStorage.setItem('sc_user_pincode', clean);
+
+    const firstTwo = parseInt(clean.substring(0, 2), 10);
+    const isAP_TS = firstTwo >= 50 && firstTwo <= 53;
+
+    // Delivery date calculation (excluding Sundays)
+    const today = new Date();
+    const addDays = isAP_TS ? 2 : 5;
+    const estDate = new Date(today);
+    estDate.setDate(estDate.getDate() + addDays);
+
+    const options = { weekday: 'short', month: 'short', day: 'numeric' };
+    const dateStr = estDate.toLocaleDateString('en-IN', options);
+
+    if (isAP_TS) {
+      setPincodeResult({
+        region: 'Telangana & Andhra Pradesh (Express Hub)',
+        days: '2 - 3 Days',
+        date: dateStr,
+        courier: 'DTDC Express & India Post Speed Post',
+        cod: true,
+        fast: true,
+      });
+    } else {
+      setPincodeResult({
+        region: 'Other Indian States (National Express)',
+        days: '4 - 6 Days',
+        date: dateStr,
+        courier: 'India Post Registered / DTDC Surface',
+        cod: true,
+        fast: false,
+      });
+    }
+  };
+
+  const handlePincodeSubmit = (e) => {
+    e.preventDefault();
+    calculateDelivery(pincode);
+  };
 
   if (loading) {
     return (
@@ -83,6 +157,7 @@ export default function ProductDetail() {
     );
   }
 
+  const isSaved = isInWishlist(product.id);
   const isOutOfStock = (product.quantity || product.stock || 0) <= 0;
   const allImages = [product.main_photo || product.image, ...(product.related_photos || [])].filter(Boolean);
 
@@ -90,6 +165,9 @@ export default function ProductDetail() {
   const oldPrice = parseFloat(product.old_price || product.actual_price || 0);
   const discount = product.discount ? Math.round(parseFloat(product.discount)) : (oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : 0);
   const savings = oldPrice > price ? (oldPrice - price).toFixed(2) : 0;
+
+  const medium = detectProductMedium(product);
+  const mediumBadge = getMediumBadge(medium);
 
   const handleAddToCart = () => {
     if (!isOutOfStock) {
@@ -107,6 +185,13 @@ export default function ProductDetail() {
     }
   };
 
+  const handleWhatsAppOrder = () => {
+    const bookTitle = product.name || product.title;
+    const currentUrl = window.location.href;
+    const msg = `Hello Sri Chaitanya Book Centre,\nI want to order this book:\n📚 *${bookTitle}*\n💰 Price: ₹${price.toFixed(2)}\n🔗 Link: ${currentUrl}\n\nPlease share delivery & payment details.`;
+    window.open(`https://wa.me/919177110134?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
   return (
     <div className="w-full bg-slate-50/60 min-h-screen py-4 sm:py-6">
       <div className="w-full max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 space-y-4 sm:space-y-6">
@@ -122,7 +207,7 @@ export default function ProductDetail() {
           </span>
         </nav>
 
-        {/* UNIFIED LUXURY MASTER CARD (No disjointed floating boxes!) */}
+        {/* UNIFIED LUXURY MASTER CARD */}
         <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden p-4 sm:p-6 lg:p-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-start">
             
@@ -145,11 +230,19 @@ export default function ProductDetail() {
                   </span>
                 )}
 
-                {/* Original Seal Badge */}
-                <span className="absolute top-3 right-3 bg-slate-900/85 backdrop-blur-xs text-white text-[9.5px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs">
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span>Original Edition</span>
-                </span>
+                {/* Wishlist Heart Button */}
+                <button
+                  type="button"
+                  onClick={() => toggleWishlist(product)}
+                  className={`absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center z-10 transition-all cursor-pointer shadow-sm ${
+                    isSaved
+                      ? 'bg-rose-50 text-rose-600 border border-rose-200 shadow-rose-500/20'
+                      : 'bg-white/90 text-slate-500 hover:text-rose-600 hover:bg-white border border-slate-200/70'
+                  }`}
+                  title={isSaved ? 'Saved in Wishlist' : 'Save to Wishlist'}
+                >
+                  <Heart className={`w-4.5 h-4.5 ${isSaved ? 'fill-rose-600 text-rose-600' : ''}`} />
+                </button>
               </div>
 
               {/* Thumbnails Gallery (Only when multiple photos exist) */}
@@ -177,6 +270,12 @@ export default function ProductDetail() {
               
               {/* Category & Verified Publisher Bar */}
               <div className="flex flex-wrap items-center gap-2">
+                {/* Medium Badge (Telugu / English Medium) */}
+                <span className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${mediumBadge.classes}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${mediumBadge.dot}`} />
+                  <span>{mediumBadge.label}</span>
+                </span>
+
                 {product.publication_name && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-red-700 bg-red-50 border border-red-200/70 px-2.5 py-0.5 rounded-full">
                     <Award className="w-3 h-3" />
@@ -197,7 +296,7 @@ export default function ProductDetail() {
                 )}
               </div>
 
-              {/* Title (Clean, Balanced & Refined - No Giant Shouty Caps!) */}
+              {/* Title */}
               <div>
                 <h1 className="text-base sm:text-lg lg:text-xl font-extrabold text-slate-900 leading-snug tracking-tight">
                   {product.name || product.title}
@@ -242,8 +341,8 @@ export default function ProductDetail() {
                 )}
               </div>
 
-              {/* High-Converting Action Buttons (Compact Single Row + WhatsApp) */}
-              <div className="space-y-2 pt-1">
+              {/* High-Converting Action Buttons */}
+              <div className="space-y-2.5 pt-1">
                 <div className="flex items-center gap-2">
                   {/* Quantity selector */}
                   <div className="flex items-center border border-slate-200 rounded-xl bg-slate-50 p-0.5 shrink-0 h-10">
@@ -285,6 +384,31 @@ export default function ProductDetail() {
                   </button>
                 </div>
 
+                {/* Secondary Row: WhatsApp Direct Order + Save to Wishlist */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleWhatsAppOrder}
+                    className="flex-1 h-9 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Order / Inquire on WhatsApp</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleWishlist(product)}
+                    className={`h-9 px-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      isSaved
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-rose-600 text-rose-600' : ''}`} />
+                    <span>{isSaved ? 'Saved in Wishlist' : 'Save for Later'}</span>
+                  </button>
+                </div>
+
                 {/* Added to cart toast */}
                 {addedToast && (
                   <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center justify-between animate-in fade-in duration-150">
@@ -301,18 +425,72 @@ export default function ProductDetail() {
                 )}
               </div>
 
+              {/* ================= PINCODE DELIVERY ESTIMATOR ================= */}
+              <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-50/80 border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900">
+                    <MapPin className="w-4 h-4 text-red-600" />
+                    <span>Check Delivery & Speed Post Availability</span>
+                  </div>
+                  {pincodeResult && (
+                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                      Verified PIN
+                    </span>
+                  )}
+                </div>
+
+                <form onSubmit={handlePincodeSubmit} className="flex gap-2">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Enter 6-digit Pincode (e.g. 500001)"
+                    value={pincode}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setPincode(val);
+                      if (val.length === 6) calculateDelivery(val);
+                    }}
+                    className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Check
+                  </button>
+                </form>
+
+                {pincodeError && (
+                  <p className="text-[11px] text-rose-600 font-bold">{pincodeError}</p>
+                )}
+
+                {pincodeResult && (
+                  <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 space-y-1 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+                      <Truck className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Estimated Delivery: <strong>{pincodeResult.date}</strong> ({pincodeResult.days})</span>
+                    </div>
+                    <div className="text-[11px] text-emerald-800/90 flex flex-wrap items-center gap-2">
+                      <span>• Partner: {pincodeResult.courier}</span>
+                      <span>• Cash on Delivery Available</span>
+                      <span>• Direct Hub Dispatch</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Quick Book Specs Strip */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 text-xs">
+                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Medium</span>
+                  <span className="font-extrabold text-slate-800 truncate block text-xs mt-0.5">
+                    {mediumBadge.label}
+                  </span>
+                </div>
                 <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Publisher</span>
                   <span className="font-extrabold text-slate-800 truncate block text-xs mt-0.5">
                     {product.publication_name || 'Official Edition'}
-                  </span>
-                </div>
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Format</span>
-                  <span className="font-extrabold text-slate-800 truncate block text-xs mt-0.5">
-                    Paperback Edition
                   </span>
                 </div>
                 <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
@@ -387,6 +565,9 @@ export default function ProductDetail() {
             </div>
           </section>
         )}
+
+        {/* ================= RECENTLY VIEWED BOOKS ================= */}
+        <RecentlyViewedBooks excludeId={product.id} />
 
       </div>
     </div>

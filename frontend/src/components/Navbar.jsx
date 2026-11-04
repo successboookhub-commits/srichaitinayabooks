@@ -20,9 +20,11 @@ import {
   MessageSquare,
   MapPin,
   Clock,
-  ShieldCheck
+  ShieldCheck,
+  Heart
 } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore.js';
+import { useWishlistStore } from '../store/useWishlistStore.js';
 import api, { getImageUrl } from '../services/api.js';
 
 export default function Navbar() {
@@ -39,6 +41,10 @@ export default function Navbar() {
   const cart = useCartStore((state) => state.cart);
   const setDrawerOpen = useCartStore((state) => state.setDrawerOpen);
   const cartCount = cart.reduce((total, item) => total + item.qty, 0);
+
+  const wishlistItems = useWishlistStore((state) => state.items);
+  const setWishlistOpen = useWishlistStore((state) => state.setWishlistOpen);
+  const wishlistCount = wishlistItems.length;
 
   // Close mobile drawer and search modal on route change
   useEffect(() => {
@@ -312,6 +318,25 @@ export default function Navbar() {
                 <Search className="w-4.5 h-4.5 text-slate-700" />
               </button>
 
+              {/* Wishlist Pill Button */}
+              <button
+                type="button"
+                onClick={() => setWishlistOpen(true)}
+                className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-800 hover:text-rose-600 border border-slate-200/80 hover:border-rose-200 transition-all cursor-pointer shadow-2xs group"
+                aria-label="View Saved Books"
+                title="Saved Books (Wishlist)"
+              >
+                <div className="relative">
+                  <Heart className={`w-4.5 h-4.5 transition-colors ${wishlistCount > 0 ? 'text-rose-600 fill-rose-600' : 'text-slate-700 group-hover:text-rose-600'}`} />
+                  {wishlistCount > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-rose-600 text-white text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs border-2 border-white">
+                      {wishlistCount}
+                    </span>
+                  )}
+                </div>
+                <span className="hidden sm:inline text-xs font-extrabold">Saved</span>
+              </button>
+
               {/* Shopping Cart Pill Button */}
               <button
                 onClick={() => setDrawerOpen(true)}
@@ -504,6 +529,27 @@ export default function Navbar() {
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-400" />
                 </Link>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    setWishlistOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-800 hover:bg-rose-50 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <Heart className={`w-4 h-4 ${wishlistCount > 0 ? 'text-rose-600 fill-rose-600' : 'text-rose-500'}`} />
+                    <span>Saved Books (Wishlist)</span>
+                  </div>
+                  {wishlistCount > 0 ? (
+                    <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-black">
+                      {wishlistCount}
+                    </span>
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )}
+                </button>
 
                 <Link
                   to="/contact"

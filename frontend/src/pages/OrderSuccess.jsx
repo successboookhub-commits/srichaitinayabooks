@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import confetti from 'canvas-confetti';
-import { CheckCircle2, Download, Package, ArrowRight, Home } from 'lucide-react';
+import { CheckCircle2, Download, Package, ArrowRight, Home, MessageCircle } from 'lucide-react';
 import api from '../services/api';
 
 export default function OrderSuccess() {
@@ -94,17 +94,28 @@ export default function OrderSuccess() {
           {order?.order_code && (
             <button
               onClick={handleDownloadInvoice}
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-5 rounded-xl shadow-md transition-all"
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition-all text-xs sm:text-sm cursor-pointer"
             >
-              <Download className="w-4 h-4" /> Download Tax Invoice (PDF)
+              <Download className="w-4 h-4" /> Download Tax Invoice
             </button>
+          )}
+
+          {order?.order_code && (
+            <a
+              href={`https://wa.me/919177110134?text=${encodeURIComponent(`Hello Sri Chaitanya Book Centre,\nI placed order *${order.order_code}* for ₹${order.total_amount}.\nPlease confirm my dispatch schedule.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition-all text-xs sm:text-sm"
+            >
+              <MessageCircle className="w-4 h-4" /> WhatsApp Receipt
+            </a>
           )}
 
           <Link
             to="/tracking"
-            className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 px-5 rounded-xl shadow-md transition-all"
+            className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition-all text-xs sm:text-sm"
           >
-            <Package className="w-4 h-4" /> Track My Orders
+            <Package className="w-4 h-4" /> Track Order
           </Link>
         </div>
 

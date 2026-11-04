@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import CartDrawer from './components/CartDrawer';
+import WishlistDrawer from './components/WishlistDrawer';
 import FloatingActions from './components/FloatingActions';
 import ScrollToTop from './components/ScrollToTop';
 
@@ -55,6 +56,7 @@ function CustomerLayout({ children }) {
     <div className="flex flex-col min-h-screen bg-slate-50">
       <Navbar />
       <CartDrawer />
+      <WishlistDrawer />
       <main className="flex-1">
         {children}
       </main>

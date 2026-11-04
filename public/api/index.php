@@ -665,6 +665,195 @@ if ($path === 'auth/me') {
 }
 
 // -------------------------------------------------------------
+// ADMINS & STAFF MANAGEMENT
+// -------------------------------------------------------------
+if ($path === 'auth/admins') {
+    if ($method === 'GET') {
+        $admins = $pdo->query("SELECT id, name, email, role, created_at, updated_at FROM users WHERE role = 'admin' ORDER BY id ASC")->fetchAll();
+        echo json_encode(['success' => true, 'admins' => $admins]);
+        exit;
+    }
+    if ($method === 'POST') {
+        $name = trim($body['name'] ?? $_POST['name'] ?? '');
+        $email = strtolower(trim($body['email'] ?? $_POST['email'] ?? ''));
+        $password = trim($body['password'] ?? $_POST['password'] ?? '');
+        $role = trim($body['role'] ?? $_POST['role'] ?? 'admin') ?: 'admin';
+
+        if (empty($name) || empty($email) || empty($password)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Full name, valid email, and password are required.']);
+            exit;
+        }
+
+        // Check if email already registered
+        $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
+        $stmt->execute([$email]);
+        if ($stmt->fetch()) {
+            http_response_code(409);
+            echo json_encode(['success' => false, 'message' => 'An administrator or user with this email already exists.']);
+            exit;
+        }
+
+        $hash = password_hash($password, PASSWORD_BCRYPT);
+        $stmt = $pdo->prepare('INSERT INTO users (name, email, password, role, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())');
+        $stmt->execute([$name, $email, $hash, $role]);
+        $newId = $pdo->lastInsertId();
+
+        $newAdmin = $pdo->query("SELECT id, name, email, role, created_at, updated_at FROM users WHERE id = {$newId}")->fetch();
+        echo json_encode([
+            'success' => true,
+            'message' => "Administrator \"{$name}\" created successfully.",
+            'admin'   => $newAdmin
+        ]);
+        exit;
+    }
+}
+
+if (preg_match('#^auth/admins/(\d+)$#', $path, $m)) {
+    $adminId = intval($m[1]);
+    if ($method === 'PUT') {
+        $name = trim($body['name'] ?? $_POST['name'] ?? '');
+        $email = strtolower(trim($body['email'] ?? $_POST['email'] ?? ''));
+        $password = trim($body['password'] ?? $_POST['password'] ?? '');
+        $role = trim($body['role'] ?? $_POST['role'] ?? 'admin') ?: 'admin';
+
+        if (!empty($password) && strlen($password) >= 6) {
+            $hash = password_hash($password, PASSWORD_BCRYPT);
+            $stmt = $pdo->prepare('UPDATE users SET name = ?, email = ?, password = ?, role = ?, updated_at = NOW() WHERE id = ?');
+            $stmt->execute([$name, $email, $hash, $role, $adminId]);
+        } else {
+            $stmt = $pdo->prepare('UPDATE users SET name = ?, email = ?, role = ?, updated_at = NOW() WHERE id = ?');
+            $stmt->execute([$name, $email, $role, $adminId]);
+        }
+        $updated = $pdo->query("SELECT id, name, email, role, created_at, updated_at FROM users WHERE id = {$adminId}")->fetch();
+        echo json_encode(['success' => true, 'message' => 'Administrator updated successfully.', 'admin' => $updated]);
+        exit;
+    }
+    if ($method === 'DELETE') {
+        $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$adminId]);
+        echo json_encode(['success' => true, 'message' => 'Administrator account deleted.']);
+        exit;
+    }
+}
+
+if ($path === 'auth/profile' && $method === 'PUT') {
+    $name = trim($body['name'] ?? $_POST['name'] ?? '');
+    $email = strtolower(trim($body['email'] ?? $_POST['email'] ?? ''));
+    $password = trim($body['password'] ?? $_POST['password'] ?? '');
+
+    $user = $pdo->query("SELECT * FROM users WHERE role = 'admin' LIMIT 1")->fetch();
+    $userId = $user['id'];
+
+    if (!empty($password) && strlen($password) >= 6) {
+        $hash = password_hash($password, PASSWORD_BCRYPT);
+        $stmt = $pdo->prepare('UPDATE users SET name = ?, email = ?, password = ?, updated_at = NOW() WHERE id = ?');
+        $stmt->execute([$name, $email, $hash, $userId]);
+    } else {
+        $stmt = $pdo->prepare('UPDATE users SET name = ?, email = ?, updated_at = NOW() WHERE id = ?');
+        $stmt->execute([$name, $email, $userId]);
+    }
+
+    $updated = $pdo->query("SELECT id, name, email, role, created_at, updated_at FROM users WHERE id = {$userId}")->fetch();
+    echo json_encode(['success' => true, 'message' => 'Profile updated successfully.', 'user' => $updated]);
+    exit;
+}
+
+// -------------------------------------------------------------
+// ORDERS (List, Single, Status Update)
+// -------------------------------------------------------------
+if ($path === 'orders') {
+    if ($method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = max(1, min(100, intval($_GET['limit'] ?? 20)));
+        $offset = ($page - 1) * $limit;
+        $status = $_GET['status'] ?? null;
+        $search = trim($_GET['search'] ?? '');
+
+        $sql = "SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email 
+                FROM orders o 
+                LEFT JOIN customers c ON c.id = o.customer_id 
+                WHERE 1=1";
+        $params = [];
+
+        if ($status && $status !== 'All') {
+            $sql .= " AND o.order_status = ?";
+            $params[] = $status;
+        }
+
+        if ($search) {
+            $sql .= " AND (o.order_code LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)";
+            $term = "%{$search}%";
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+        }
+
+        $countSql = "SELECT COUNT(*) FROM (" . $sql . ") as t";
+        $countStmt = $pdo->prepare($countSql);
+        $countStmt->execute($params);
+        $total = intval($countStmt->fetchColumn());
+
+        $sql .= " ORDER BY o.id DESC LIMIT {$limit} OFFSET {$offset}";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $orders = $stmt->fetchAll();
+
+        foreach ($orders as &$ord) {
+            $itemStmt = $pdo->prepare('
+                SELECT oi.*, p.name AS product_name, p.main_photo AS product_image
+                FROM order_items oi
+                LEFT JOIN products p ON p.id = oi.product_id
+                WHERE oi.order_id = ?
+            ');
+            $itemStmt->execute([$ord['id']]);
+            $ord['items'] = $itemStmt->fetchAll();
+        }
+
+        echo json_encode([
+            'success'     => true,
+            'orders'      => $orders,
+            'total'       => $total,
+            'totalPages'  => ceil($total / $limit),
+            'currentPage' => $page
+        ]);
+        exit;
+    }
+}
+
+if (preg_match('#^orders/(\d+)$#', $path, $m)) {
+    $orderId = intval($m[1]);
+    if ($method === 'GET') {
+        $stmt = $pdo->prepare("SELECT o.*, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email, c.address, c.city, c.state, c.pincode FROM orders o LEFT JOIN customers c ON c.id = o.customer_id WHERE o.id = ? LIMIT 1");
+        $stmt->execute([$orderId]);
+        $order = $stmt->fetch();
+        if ($order) {
+            $itemStmt = $pdo->prepare('SELECT oi.*, p.name AS product_name, p.main_photo AS product_image FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?');
+            $itemStmt->execute([$order['id']]);
+            $order['items'] = $itemStmt->fetchAll();
+            echo json_encode(['success' => true, 'order' => $order]);
+        } else {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Order not found.']);
+        }
+        exit;
+    }
+    if ($method === 'DELETE') {
+        $pdo->prepare('DELETE FROM order_items WHERE order_id = ?')->execute([$orderId]);
+        $pdo->prepare('DELETE FROM orders WHERE id = ?')->execute([$orderId]);
+        echo json_encode(['success' => true, 'message' => 'Order deleted.']);
+        exit;
+    }
+}
+
+if (preg_match('#^orders/(\d+)/status$#', $path, $m) && $method === 'PUT') {
+    $orderId = intval($m[1]);
+    $newStatus = $body['status'] ?? $body['order_status'] ?? 'Processing';
+    $pdo->prepare('UPDATE orders SET order_status = ?, updated_at = NOW() WHERE id = ?')->execute([$newStatus, $orderId]);
+    echo json_encode(['success' => true, 'message' => 'Order status updated.']);
+    exit;
+}
+
+// -------------------------------------------------------------
 // DASHBOARD STATS
 // -------------------------------------------------------------
 if ($path === 'dashboard/stats') {

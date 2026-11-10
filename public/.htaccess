@@ -52,9 +52,6 @@ DirectoryIndex index.html index.php
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # If a storage file (book cover/banner) is missing locally, fallback to main site
-    RewriteRule ^storage/(.*)$ https://successbookhub.com/storage/$1 [R=302,L]
-
     # React Single Page Application (SPA) routing: send all other requests to index.html
     RewriteRule ^ index.html [L]
 </IfModule>

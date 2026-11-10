@@ -63,11 +63,12 @@ export const getImageUrl = (imagePath) => {
   if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
     return imagePath;
   }
+  const cleanPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
   // Check if it's from legacy Laravel storage or new uploads
-  if (imagePath.startsWith('products/') || imagePath.startsWith('banners/') || imagePath.startsWith('uploads/')) {
-    return `${SERVER_URL}/storage/${imagePath}`;
+  if (cleanPath.startsWith('products/') || cleanPath.startsWith('banners/') || cleanPath.startsWith('uploads/')) {
+    return SERVER_URL ? `${SERVER_URL}/storage/${cleanPath}` : `/storage/${cleanPath}`;
   }
-  return `${SERVER_URL}/${imagePath}`;
+  return SERVER_URL ? `${SERVER_URL}/${cleanPath}` : `/${cleanPath}`;
 };
 
 export const getInvoiceUrl = (orderCode) => {

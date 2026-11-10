@@ -161,8 +161,46 @@ if ($path === 'realtime/sync') {
 if ($path === 'banners' || $path === 'banners/admin') {
     if ($method === 'GET') {
         header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
-        $stmt = $pdo->query('SELECT * FROM banners ORDER BY id DESC');
-        $banners = $stmt->fetchAll();
+        $defaultBanners = [
+            ['id' => 1, 'title' => '', 'image' => '/images/banners/banner1.jpg'],
+            ['id' => 2, 'title' => '', 'image' => '/images/banners/banner2.jpg'],
+            ['id' => 3, 'title' => '', 'image' => '/images/banners/banner3.jpg'],
+        ];
+        try {
+            $stmt = $pdo->query('SELECT * FROM banners ORDER BY id DESC');
+            $banners = $stmt ? $stmt->fetchAll() : [];
+        } catch (\Throwable $e) {
+            $banners = [];
+        }
+        if (empty($banners)) {
+            $banners = $defaultBanners;
+        } else {
+            foreach ($banners as $idx => &$b) {
+                $rawImg = $b['image'] ?? '';
+                $cleanTitle = trim($b['title'] ?? '');
+                if (in_array($cleanTitle, ['1', '2', '3', '4', '5'])) {
+                    $b['title'] = '';
+                }
+                $exists = false;
+                if ($rawImg) {
+                    $checkPaths = [
+                        dirname(__DIR__) . '/storage/' . $rawImg,
+                        dirname(__DIR__) . '/' . ltrim($rawImg, '/'),
+                    ];
+                    foreach ($checkPaths as $cp) {
+                        if (file_exists($cp)) {
+                            $exists = true;
+                            break;
+                        }
+                    }
+                }
+                if (!$exists) {
+                    $fallbackIdx = ($idx % 3) + 1;
+                    $b['image'] = '/images/banners/banner' . $fallbackIdx . '.jpg';
+                }
+            }
+            unset($b);
+        }
         echo json_encode(['success' => true, 'banners' => $banners]);
         exit;
     }

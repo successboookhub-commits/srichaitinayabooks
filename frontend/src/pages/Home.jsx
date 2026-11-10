@@ -6,6 +6,7 @@ import realtime from '../services/realtime.js';
 import BannerSlider from '../components/BannerSlider.jsx';
 import ProductCard from '../components/ProductCard.jsx';
 import CategoryGrid from '../components/CategoryGrid.jsx';
+import ExamSearchFilter from '../components/ExamSearchFilter.jsx';
 
 export default function Home() {
   const [banners, setBanners] = useState([]);
@@ -82,12 +83,12 @@ export default function Home() {
         <BannerSlider banners={banners} />
       </section>
 
-      {/* Official Exam Categories Grid */}
-      <section className="w-full pt-0.5 sm:pt-1">
-        <CategoryGrid />
+      {/* Quick Exam Finder: Which exam are you looking for? */}
+      <section className="w-full">
+        <ExamSearchFilter />
       </section>
 
-      {/* ================= 1. DYNAMIC CUSTOM SECTIONS (New Arrivals, Featured, etc.) ================= */}
+      {/* ================= 1. FEATURED BOOKS / CURATED STUDY MATERIALS ================= */}
       {homeSections.length > 0 ? (
         homeSections.map((section) => {
           if (!section.products || section.products.length === 0) return null;
@@ -149,6 +150,11 @@ export default function Home() {
           </section>
         )
       )}
+
+      {/* ================= 2. OFFICIAL EXAM CATEGORIES GRID ================= */}
+      <section className="w-full pt-2 sm:pt-4 border-t border-slate-100">
+        <CategoryGrid />
+      </section>
 
       {/* ================= 2. BASED ON CATEGORIES SHOWCASE ================= */}
       {showcaseSettings.show_category_showcase && categorySections.length > 0 && (

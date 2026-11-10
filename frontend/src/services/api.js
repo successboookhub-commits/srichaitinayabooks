@@ -5,7 +5,7 @@ export const SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 20000,
+  timeout: 15000,
 });
 
 api.interceptors.request.use((config) => {
@@ -16,34 +16,112 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// High-Performance In-Memory Cache (SWR - Stale While Revalidate)
+// ============================================================
+// ULTRA-FAST MULTI-TIER SWR CACHE (Memory + LocalStorage + Deduplication)
+// ============================================================
 const memoryCache = new Map();
-const DEFAULT_CACHE_TTL = 90 * 1000; // 90 seconds client cache
+const inFlightRequests = new Map();
+const DEFAULT_CACHE_TTL = 3 * 60 * 1000; // 3 minutes fresh cache
+const REVALIDATE_INTERVAL = 30 * 1000; // Background refresh if older than 30s
+const STORAGE_PREFIX = 'sc_swr_';
+
+// Safe localStorage wrapper
+function readStorage(key) {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key, data) {
+  try {
+    // Only cache GET query payloads under 1MB
+    const str = JSON.stringify(data);
+    if (str.length < 1000000) {
+      localStorage.setItem(STORAGE_PREFIX + key, str);
+    }
+  } catch (e) {
+    // If storage is full, clean up old keys
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(STORAGE_PREFIX)) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch {}
+  }
+}
 
 api.getCached = async (url, config = {}) => {
   const cacheKey = url + JSON.stringify(config.params || {});
-  const cached = memoryCache.get(cacheKey);
   const now = Date.now();
 
-  // Instant response from memory cache (0ms)
-  if (cached && (now - cached.timestamp < DEFAULT_CACHE_TTL)) {
-    // Background quiet revalidation if older than 20 seconds
-    if (now - cached.timestamp > 20 * 1000) {
-      api.get(url, config).then((freshRes) => {
-        memoryCache.set(cacheKey, { timestamp: Date.now(), response: freshRes });
-      }).catch(() => {});
+  // 1. Check in-memory Map (0ms instant)
+  let cached = memoryCache.get(cacheKey);
+
+  // 2. If not in memory, check localStorage (0.5ms instant on app launch)
+  if (!cached) {
+    const stored = readStorage(cacheKey);
+    if (stored && stored.data) {
+      cached = { timestamp: stored.timestamp, response: { data: stored.data, status: 200 } };
+      memoryCache.set(cacheKey, cached);
     }
+  }
+
+  // 3. If we have cached data (Stale-While-Revalidate)
+  if (cached && (now - cached.timestamp < DEFAULT_CACHE_TTL)) {
+    // If older than REVALIDATE_INTERVAL, trigger quiet background revalidation
+    if (now - cached.timestamp > REVALIDATE_INTERVAL) {
+      if (!inFlightRequests.has(cacheKey)) {
+        const bgFetch = api.get(url, config)
+          .then((freshRes) => {
+            memoryCache.set(cacheKey, { timestamp: Date.now(), response: freshRes });
+            writeStorage(cacheKey, { timestamp: Date.now(), data: freshRes.data });
+          })
+          .catch(() => {})
+          .finally(() => inFlightRequests.delete(cacheKey));
+        inFlightRequests.set(cacheKey, bgFetch);
+      }
+    }
+    // Return cached response instantly (0ms render!)
     return Promise.resolve(cached.response);
   }
 
-  const response = await api.get(url, config);
-  memoryCache.set(cacheKey, { timestamp: now, response });
-  return response;
+  // 4. Request Deduplication: avoid duplicate network requests in flight
+  if (inFlightRequests.has(cacheKey)) {
+    return inFlightRequests.get(cacheKey);
+  }
+
+  const networkPromise = api.get(url, config)
+    .then((response) => {
+      memoryCache.set(cacheKey, { timestamp: Date.now(), response });
+      writeStorage(cacheKey, { timestamp: Date.now(), data: response.data });
+      return response;
+    })
+    .finally(() => {
+      inFlightRequests.delete(cacheKey);
+    });
+
+  inFlightRequests.set(cacheKey, networkPromise);
+  return networkPromise;
 };
 
 // Clear client cache on state-changing operations
 api.clearCache = () => {
   memoryCache.clear();
+  inFlightRequests.clear();
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(STORAGE_PREFIX)) {
+        localStorage.removeItem(k);
+      }
+    }
+  } catch {}
 };
 
 api.interceptors.response.use(
@@ -51,7 +129,7 @@ api.interceptors.response.use(
     // If a write operation succeeded, clear cache so data is fresh
     const method = response.config?.method?.toLowerCase();
     if (method === 'post' || method === 'put' || method === 'delete') {
-      memoryCache.clear();
+      api.clearCache();
     }
     return response;
   },

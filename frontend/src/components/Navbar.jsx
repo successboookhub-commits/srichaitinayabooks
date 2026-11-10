@@ -27,6 +27,44 @@ import { useCartStore } from '../store/useCartStore.js';
 import { useWishlistStore } from '../store/useWishlistStore.js';
 import api, { getImageUrl } from '../services/api.js';
 
+// Smart search ranking: prioritizes books whose names or words start with the search query
+function rankSearchResults(items, query) {
+  if (!Array.isArray(items) || !query) return items;
+  const q = query.toLowerCase().trim();
+  if (!q) return items;
+
+  const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordRegex = new RegExp(`(^|\\s|\\(|\\/|\\[)${escapeRegex(q)}`, 'i');
+
+  return [...items].sort((a, b) => {
+    const aName = (a.name || a.title || '').toLowerCase().trim();
+    const bName = (b.name || b.title || '').toLowerCase().trim();
+
+    // 1. Book name directly starts with query (e.g. "CHARY...", "COMPETE MINDS...")
+    const aStarts = aName.startsWith(q);
+    const bStarts = bName.startsWith(q);
+    if (aStarts && !bStarts) return -1;
+    if (!aStarts && bStarts) return 1;
+
+    // 2. Any internal word starts with query (e.g. "... CONSTABLE", "... CIVILS")
+    const aWord = wordRegex.test(aName);
+    const bWord = wordRegex.test(bName);
+    if (aWord && !bWord) return -1;
+    if (!aWord && bWord) return 1;
+
+    // 3. Publication starts with query
+    const aPub = (a.publication_name || '').toLowerCase().trim();
+    const bPub = (b.publication_name || '').toLowerCase().trim();
+    const aPubStarts = aPub.startsWith(q);
+    const bPubStarts = bPub.startsWith(q);
+    if (aPubStarts && !bPubStarts) return -1;
+    if (!aPubStarts && bPubStarts) return 1;
+
+    // 4. Fallback: newer books first
+    return (b.id || 0) - (a.id || 0);
+  });
+}
+
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -72,7 +110,8 @@ export default function Navbar() {
   }, [isSearchModalOpen]);
 
   useEffect(() => {
-    if (searchQuery.trim().length < 2) {
+    const q = searchQuery.trim();
+    if (q.length < 1) {
       setSuggestions([]);
       return;
     }
@@ -80,16 +119,36 @@ export default function Navbar() {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await api.get(`/products/suggest?q=${encodeURIComponent(searchQuery)}`);
-        if (res.data.success) {
-          setSuggestions(res.data.results || []);
+        let items = [];
+
+        // 1. Try dedicated autocomplete suggest endpoint
+        try {
+          const res = await api.get(`/products/suggest?q=${encodeURIComponent(q)}`);
+          if (res?.data?.success) {
+            items = res.data.results || res.data.suggestions || res.data.products || [];
+          }
+        } catch {
+          // Ignore error and fallback below
         }
+
+        // 2. Fallback to /products?search=...
+        if (!items || items.length === 0) {
+          const prodRes = await api.get(`/products?search=${encodeURIComponent(q)}&limit=25`);
+          if (prodRes?.data?.success) {
+            items = prodRes.data.products || [];
+          }
+        }
+
+        // Rank items so books starting with query letter/word appear at the very top
+        const ranked = rankSearchResults(items, q);
+        setSuggestions(ranked);
       } catch (err) {
-        console.error(err);
+        console.error('Search error:', err);
+        setSuggestions([]);
       } finally {
         setIsSearching(false);
       }
-    }, 220);
+    }, 150);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -146,18 +205,18 @@ export default function Navbar() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4 shrink-0 text-slate-300 text-[11px]">
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0 text-slate-300 text-[11px]">
             <a
               href="tel:09177110134"
               className="hidden sm:flex items-center gap-1.5 hover:text-white transition-colors"
             >
               <Phone className="w-3 h-3 text-emerald-400" />
-              <span>Helpline: <strong>09177110134</strong></span>
+              <span>Call / Message for Orders & Enquiries: <strong>09177110134</strong></span>
             </a>
             <span className="hidden sm:inline text-slate-600">|</span>
             <span className="flex items-center gap-1.5 text-slate-300">
-              <Clock className="w-3 h-3 text-amber-400" />
-              <span>Open 7 Days: 10AM - 9PM</span>
+              <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+              <span>Store Time: 10 AM to 6 PM</span>
             </span>
           </div>
         </div>
@@ -270,36 +329,53 @@ export default function Navbar() {
                     <span>{suggestions.length} results</span>
                   </div>
                   <div className="p-2 divide-y divide-slate-100 max-h-80 overflow-y-auto">
-                    {suggestions.map((item) => (
-                      <Link
-                        key={item.id}
-                        to={`/product/${item.slug}`}
-                        onClick={() => setSuggestions([])}
-                        className="flex items-center gap-3 p-2.5 hover:bg-red-50/70 rounded-xl transition-colors group cursor-pointer"
-                      >
-                        <img
-                          src={getImageUrl(item.main_photo)}
-                          alt={item.name}
-                          className="w-10 h-13 object-cover rounded-md bg-slate-100 shrink-0 shadow-xs border border-slate-200"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-slate-900 truncate group-hover:text-red-600">
-                            {item.name}
-                          </p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs font-black text-red-600">
-                              ₹{parseFloat(item.total_price).toFixed(2)}
-                            </span>
-                            {item.actual_price && (
-                              <span className="text-[11px] text-slate-400 line-through">
-                                ₹{parseFloat(item.actual_price).toFixed(2)}
-                              </span>
-                            )}
+                    {suggestions.map((item) => {
+                      const itemPrice = parseFloat(item.total_price || item.price || 0);
+                      const itemOldPrice = parseFloat(item.actual_price || item.old_price || 0);
+                      const itemImage = item.main_photo || item.image;
+                      const itemUrl = item.slug ? `/product/${item.slug}` : `/product/${item.id}`;
+
+                      return (
+                        <Link
+                          key={item.id}
+                          to={itemUrl}
+                          onClick={() => setSuggestions([])}
+                          className="flex items-center gap-3 p-2.5 hover:bg-red-50/70 rounded-xl transition-colors group cursor-pointer"
+                        >
+                          <div className="w-10 h-13 rounded-md bg-slate-50 shrink-0 shadow-xs border border-slate-200 overflow-hidden flex items-center justify-center p-0.5">
+                            <img
+                              src={getImageUrl(itemImage)}
+                              alt={item.name}
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                e.currentTarget.src = '/placeholder-book.png';
+                              }}
+                            />
                           </div>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-red-600 group-hover:translate-x-1 transition-all" />
-                      </Link>
-                    ))}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate group-hover:text-red-600">
+                              {item.name}
+                            </p>
+                            {item.publication_name && (
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {item.publication_name}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs font-black text-red-600">
+                                ₹{itemPrice.toFixed(2)}
+                              </span>
+                              {itemOldPrice > itemPrice && (
+                                <span className="text-[11px] text-slate-400 line-through">
+                                  ₹{itemOldPrice.toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-red-600 group-hover:translate-x-1 transition-all" />
+                        </Link>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -570,13 +646,23 @@ export default function Navbar() {
             </div>
 
             {/* Bottom Drawer Contact & Helpline Strip */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-2.5">
+            <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-2">
+              <div className="text-center pb-0.5">
+                <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-slate-800 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full">
+                  <Clock className="w-3 h-3 text-amber-600" />
+                  <span>Store Time: 10:00 AM – 6:00 PM</span>
+                </span>
+                <p className="text-[10px] text-slate-500 font-medium mt-1">
+                  Call or Message for Orders & Enquiries
+                </p>
+              </div>
+
               <a
                 href="tel:09177110134"
                 className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-600 text-white font-bold text-xs rounded-xl shadow-md shadow-red-500/20 hover:bg-red-700 transition-colors"
               >
                 <Phone className="w-4 h-4" />
-                <span>Call Helpline: 09177110134</span>
+                <span>Call: 09177110134</span>
               </a>
 
               <a
@@ -732,42 +818,56 @@ export default function Navbar() {
                   <span>Matching Books ({suggestions.length})</span>
                   <span>Tap to open</span>
                 </div>
-                {suggestions.map((item) => (
-                  <Link
-                    key={item.id}
-                    to={`/product/${item.slug}`}
-                    onClick={() => {
-                      setIsSearchModalOpen(false);
-                      setSuggestions([]);
-                    }}
-                    className="flex items-center gap-3.5 p-3.5 hover:bg-red-50/60 active:bg-red-50 transition-colors cursor-pointer"
-                  >
-                    <img
-                      src={getImageUrl(item.main_photo)}
-                      alt={item.name}
-                      className="w-12 h-16 object-contain rounded-lg bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 shadow-2xs"
-                      onError={(e) => {
-                        e.currentTarget.src = '/images/ebook_logo.png';
+                {suggestions.map((item) => {
+                  const itemPrice = parseFloat(item.total_price || item.price || 0);
+                  const itemOldPrice = parseFloat(item.actual_price || item.old_price || 0);
+                  const itemImage = item.main_photo || item.image;
+                  const itemUrl = item.slug ? `/product/${item.slug}` : `/product/${item.id}`;
+
+                  return (
+                    <Link
+                      key={item.id}
+                      to={itemUrl}
+                      onClick={() => {
+                        setIsSearchModalOpen(false);
+                        setSuggestions([]);
                       }}
-                    />
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <p className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug line-clamp-2">
-                        {item.name}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-red-600">
-                          ₹{parseFloat(item.total_price).toFixed(2)}
-                        </span>
-                        {item.actual_price && (
-                          <span className="text-[11px] text-slate-400 line-through">
-                            ₹{parseFloat(item.actual_price).toFixed(2)}
-                          </span>
-                        )}
+                      className="flex items-center gap-3.5 p-3 hover:bg-red-50/60 active:bg-red-50 transition-colors cursor-pointer"
+                    >
+                      <div className="w-12 h-16 rounded-lg bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 shadow-2xs flex items-center justify-center overflow-hidden">
+                        <img
+                          src={getImageUrl(itemImage)}
+                          alt={item.name}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            e.currentTarget.src = '/placeholder-book.png';
+                          }}
+                        />
                       </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 shrink-0 ml-1" />
-                  </Link>
-                ))}
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug line-clamp-2">
+                          {item.name}
+                        </p>
+                        {item.publication_name && (
+                          <p className="text-[10px] font-semibold text-slate-500 truncate">
+                            {item.publication_name}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-red-600">
+                            ₹{itemPrice.toFixed(2)}
+                          </span>
+                          {itemOldPrice > itemPrice && (
+                            <span className="text-[11px] text-slate-400 line-through">
+                              ₹{itemOldPrice.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-slate-300 shrink-0 ml-1" />
+                    </Link>
+                  );
+                })}
 
                 {/* Footer Bar: View all results in Shop */}
                 <div className="p-4 bg-slate-50/80 border-t border-slate-100 text-center">
@@ -784,12 +884,23 @@ export default function Navbar() {
                   </button>
                 </div>
               </div>
-            ) : searchQuery.trim().length >= 2 ? (
-              <div className="p-8 text-center space-y-2">
+            ) : searchQuery.trim().length >= 1 ? (
+              <div className="p-8 text-center space-y-3">
                 <p className="text-sm font-bold text-slate-800">No books found for "{searchQuery}"</p>
                 <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
                   Check your spelling or try searching exam keywords like AP-SET, TG-SET, TGPSC, Police, or Vijetha.
                 </p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    handleSearchSubmit(e);
+                    setIsSearchModalOpen(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  <span>Search All Books in Shop</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             ) : (
               /* Popular exam tags when search is empty */

@@ -1,4 +1,9 @@
 <?php
+// Enable HTTP GZIP output compression for ultra-fast transfers on 2G/3G/4G/5G
+if (!ob_start('ob_gzhandler')) {
+    ob_start();
+}
+
 require_once __DIR__ . '/config.php';
 
 header('Content-Type: application/json');
@@ -96,6 +101,9 @@ function clearStoreCache() {
     $files = [
         sys_get_temp_dir() . '/sc_home_sections_v2.json',
         sys_get_temp_dir() . '/sc_categories_v2.json',
+        sys_get_temp_dir() . '/sc_products_featured.json',
+        sys_get_temp_dir() . '/sc_products_recent.json',
+        sys_get_temp_dir() . '/sc_banners_v2.json',
     ];
     foreach ($files as $f) {
         if (file_exists($f)) @unlink($f);
@@ -160,6 +168,15 @@ if ($path === 'realtime/sync') {
 // -------------------------------------------------------------
 if ($path === 'banners' || $path === 'banners/admin') {
     if ($method === 'GET') {
+        $cacheFile = sys_get_temp_dir() . '/sc_banners_v2.json';
+        if ($path === 'banners' && empty($_GET['nocache']) && file_exists($cacheFile) && (time() - filemtime($cacheFile) < 180)) {
+            header('Content-Type: application/json');
+            header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
+            header('X-Cache: HIT');
+            readfile($cacheFile);
+            exit;
+        }
+
         header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
         $defaultBanners = [
             ['id' => 1, 'title' => '', 'image' => '/images/banners/banner1.jpg'],
@@ -201,7 +218,11 @@ if ($path === 'banners' || $path === 'banners/admin') {
             }
             unset($b);
         }
-        echo json_encode(['success' => true, 'banners' => $banners]);
+        $out = json_encode(['success' => true, 'banners' => $banners]);
+        if ($path === 'banners') {
+            @file_put_contents($cacheFile, $out);
+        }
+        echo $out;
         exit;
     }
     if ($method === 'POST') {
@@ -694,6 +715,24 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         $featured = $_GET['featured'] ?? $_GET['is_featured'] ?? null;
         $stockStatus = $_GET['stock_status'] ?? null;
 
+        // Ultra-Fast Disk Cache for common public queries (Featured & Recent products)
+        $cacheCandidateFile = null;
+        if (!$isAdmin && empty($search) && empty($publicationId) && empty($categoryId) && empty($stockStatus) && $page === 1) {
+            if (($featured === '1' || $featured === 'true') && $limit == 12) {
+                $cacheCandidateFile = sys_get_temp_dir() . '/sc_products_featured.json';
+            } elseif (($featured === null || $featured === '') && $limit == 12) {
+                $cacheCandidateFile = sys_get_temp_dir() . '/sc_products_recent.json';
+            }
+        }
+
+        if ($cacheCandidateFile && empty($_GET['nocache']) && file_exists($cacheCandidateFile) && (time() - filemtime($cacheCandidateFile) < 180)) {
+            header('Content-Type: application/json');
+            header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
+            header('X-Cache: HIT');
+            readfile($cacheCandidateFile);
+            exit;
+        }
+
         $sql = "SELECT p.*, pub.name AS publication_name FROM products p LEFT JOIN publications pub ON p.publication_id = pub.id WHERE 1=1";
         $params = [];
 
@@ -767,7 +806,7 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         $rows = $stmt->fetchAll();
 
         $formatted = array_map('formatProduct', $rows);
-        echo json_encode([
+        $out = json_encode([
             'success'    => true,
             'total'      => $total,
             'page'       => $page,
@@ -775,6 +814,11 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
             'count'      => count($formatted),
             'products'   => $formatted,
         ]);
+        if (!empty($cacheCandidateFile)) {
+            @file_put_contents($cacheCandidateFile, $out);
+            header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
+        }
+        echo $out;
         exit;
     }
     if ($method === 'POST') {
@@ -881,8 +925,54 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
     }
 }
 
+// -------------------------------------------------------------
+// Search Suggestions (Fast Autocomplete with Book Photos)
+// -------------------------------------------------------------
+if ($path === 'products/suggest') {
+    $q = trim($_GET['q'] ?? $_GET['search'] ?? '');
+    if (empty($q)) {
+        echo json_encode(['success' => true, 'suggestions' => [], 'results' => [], 'products' => []]);
+        exit;
+    }
+    $term = '%' . $q . '%';
+    $leadTerm = $q . '%';
+
+    try {
+        $sql = "SELECT p.id, p.name, p.slug, p.main_photo, p.main_photo AS image, 
+                       p.total_price, p.total_price AS price, p.old_price, p.actual_price,
+                       pub.name AS publication_name
+                FROM products p
+                LEFT JOIN publications pub ON p.publication_id = pub.id
+                WHERE p.is_active = 1 
+                  AND (p.name LIKE ? OR pub.name LIKE ? OR p.description LIKE ?)
+                ORDER BY 
+                  CASE 
+                    WHEN p.name LIKE ? THEN 1
+                    WHEN pub.name LIKE ? THEN 2
+                    ELSE 3
+                  END, p.id DESC
+                LIMIT 10";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$term, $term, $term, $leadTerm, $leadTerm]);
+        $results = $stmt->fetchAll();
+    } catch (\Throwable $e) {
+        // Fallback simple search if join or column issue
+        $stmt = $pdo->prepare('SELECT id, name, slug, main_photo, main_photo AS image, total_price, total_price AS price, old_price FROM products WHERE is_active = 1 AND name LIKE ? ORDER BY id DESC LIMIT 10');
+        $stmt->execute([$term]);
+        $results = $stmt->fetchAll();
+    }
+
+    echo json_encode([
+        'success'     => true,
+        'suggestions' => $results,
+        'results'     => $results,
+        'products'    => $results,
+    ]);
+    exit;
+}
+
 // Single product by slug or id
-if (preg_match('#^products/(detail/)?([^/]+)$#', $path, $matches)) {
+if (preg_match('#^products/(detail/)?([^/]+)$#', $path, $matches) && $matches[2] !== 'suggest') {
     $slugOrId = $matches[2];
     $stmt = $pdo->prepare('SELECT * FROM products WHERE (slug = ? OR id = ?) AND is_active = 1 LIMIT 1');
     $stmt->execute([$slugOrId, is_numeric($slugOrId) ? intval($slugOrId) : -1]);
@@ -894,21 +984,6 @@ if (preg_match('#^products/(detail/)?([^/]+)$#', $path, $matches)) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'Product not found.']);
     }
-    exit;
-}
-
-// Search Suggestions
-if ($path === 'products/suggest') {
-    $q = trim($_GET['q'] ?? $_GET['search'] ?? '');
-    if (empty($q)) {
-        echo json_encode(['success' => true, 'suggestions' => []]);
-        exit;
-    }
-    $stmt = $pdo->prepare('SELECT id, name, slug, main_photo AS image, total_price AS price FROM products WHERE is_active = 1 AND (name LIKE ? OR author LIKE ?) LIMIT 8');
-    $term = '%' . $q . '%';
-    $stmt->execute([$term, $term]);
-    $suggestions = $stmt->fetchAll();
-    echo json_encode(['success' => true, 'suggestions' => $suggestions]);
     exit;
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles, Layers, X, Search, Check } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import api from '../services/api.js';
 
 // Top curated exam categories with exact matching DB IDs
@@ -80,9 +80,7 @@ const PRIMARY_CATEGORIES = [
 ];
 
 export default function CategoryGrid() {
-  const [showAllModal, setShowAllModal] = useState(false);
   const [allCategories, setAllCategories] = useState([]);
-  const [modalSearch, setModalSearch] = useState('');
 
   // Load full categories list for dynamic display & the modal (Cached 0ms)
   useEffect(() => {
@@ -126,13 +124,6 @@ export default function CategoryGrid() {
 
     return list;
   }, [allCategories]);
-
-  const filteredModalCategories = allCategories.filter((c) => {
-    if (!modalSearch.trim()) return true;
-    const term = modalSearch.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const cNorm = c.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return cNorm.includes(term);
-  });
 
   return (
     <section className="w-full">
@@ -208,109 +199,16 @@ export default function CategoryGrid() {
       </div>
 
       {/* ================= VIEW ALL CATEGORIES BUTTON (Directly Under Categories) ================= */}
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2 sm:pt-3">
+      <div className="flex items-center justify-center pt-2 sm:pt-3">
         <Link
           to="/shop"
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 rounded-full bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-red-500/20 hover:shadow-lg hover:shadow-red-500/30 active:scale-98 transition-all duration-200 cursor-pointer group"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-red-500/20 hover:shadow-lg hover:shadow-red-500/30 active:scale-98 transition-all duration-200 cursor-pointer group"
         >
           <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300 group-hover:rotate-12 transition-transform" />
           <span>View All Categories (50+ Exams)</span>
           <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
         </Link>
-
-        {allCategories.length > 0 && (
-          <button
-            onClick={() => setShowAllModal(true)}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200/80 transition-colors cursor-pointer"
-          >
-            <Layers className="w-3.5 h-3.5 text-slate-500" />
-            <span>Quick Category Drawer</span>
-          </button>
-        )}
       </div>
-
-      {/* ================= QUICK BROWSE ALL 50+ CATEGORIES MODAL ================= */}
-      {showAllModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300"
-            onClick={() => setShowAllModal(false)}
-          />
-
-          <div className="relative bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] shadow-2xl flex flex-col z-50 overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
-                  <Layers className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900">
-                    All Exam Categories ({allCategories.length})
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Click any exam category to view its official textbooks & guides
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowAllModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Search */}
-            <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/50">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Find exam (e.g. Police, TGPSC, APPSC, DSC, SET, RRB)..."
-                  value={modalSearch}
-                  onChange={(e) => setModalSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all"
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            {/* Categories Grid List */}
-            <div className="p-4 overflow-y-auto max-h-[60vh] grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {filteredModalCategories.length === 0 ? (
-                <div className="col-span-2 py-8 text-center text-xs text-slate-400">
-                  No exam categories match "{modalSearch}"
-                </div>
-              ) : (
-                filteredModalCategories.map((c) => (
-                  <Link
-                    key={c.id}
-                    to={`/shop?category_id=${c.id}`}
-                    onClick={() => setShowAllModal(false)}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-50/70 hover:bg-red-50/60 border border-slate-200/80 hover:border-red-200 transition-all text-xs font-bold text-slate-800 hover:text-red-600 group"
-                  >
-                    <span className="truncate">{c.name}</span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-red-600 group-hover:translate-x-1 transition-all shrink-0 ml-2" />
-                  </Link>
-                ))
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
-              <Link
-                to="/shop"
-                onClick={() => setShowAllModal(false)}
-                className="text-xs font-extrabold text-red-600 hover:text-red-700"
-              >
-                Go to Full Store Catalog →
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

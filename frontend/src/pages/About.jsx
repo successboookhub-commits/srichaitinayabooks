@@ -85,8 +85,8 @@ export default function About() {
       color: 'text-amber-600 bg-amber-50 border-amber-100',
     },
     {
-      title: 'Human-First WhatsApp & Call Help',
-      desc: 'Direct helpline (09177110134) manned by experienced staff who understand Telugu & English competitive syllabi.',
+      title: 'Human-First Call & Message Support',
+      desc: 'Direct helpline (09177110134) active from 10:00 AM to 6:00 PM for orders & enquiries by experienced staff who understand competitive syllabi.',
       icon: Headphones,
       color: 'text-rose-600 bg-rose-50 border-rose-100',
     },
@@ -277,9 +277,9 @@ export default function About() {
               </div>
 
               <div className="bg-white/10 backdrop-blur-md border border-white/20 px-4 py-3 rounded-xl text-center shrink-0">
-                <span className="block text-xs uppercase tracking-wider text-red-300 font-bold">Store Status</span>
-                <span className="text-sm font-extrabold text-white">Open 7 Days a Week</span>
-                <span className="block text-[11px] text-emerald-300 font-medium mt-0.5">10:00 AM – 9:00 PM</span>
+                <span className="block text-xs uppercase tracking-wider text-red-300 font-bold">Store Hours</span>
+                <span className="text-sm font-extrabold text-white">10:00 AM – 6:00 PM</span>
+                <span className="block text-[11px] text-emerald-300 font-medium mt-0.5">Call / Message for Orders & Enquiries</span>
               </div>
             </div>
           </div>

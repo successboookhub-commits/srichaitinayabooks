@@ -7,6 +7,20 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    target: 'es2020',
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-utils': ['axios', 'zustand'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     host: true,

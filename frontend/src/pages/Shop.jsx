@@ -9,14 +9,12 @@ import {
   Check,
   ChevronRight,
   SlidersHorizontal,
-  Sparkles,
-  ArrowUpDown
+  Sparkles
 } from 'lucide-react';
 import api from '../services/api.js';
 import ProductCard from '../components/ProductCard.jsx';
 import RecentlyViewedBooks from '../components/RecentlyViewedBooks.jsx';
 import { fuzzyMatch } from '../utils/fuzzySearch.js';
-import { detectProductMedium } from '../utils/mediumDetector.js';
 
 // Curated Top Exam Filters with mapped category IDs
 const QUICK_EXAM_PILLS = [
@@ -40,8 +38,7 @@ export default function Shop() {
   const [loading, setLoading] = useState(true);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
-  // Medium Filter & Sorting
-  const [selectedMedium, setSelectedMedium] = useState('all'); // 'all', 'telugu', 'english'
+  // Sorting
   const [sortBy, setSortBy] = useState('default'); // 'default', 'price-low', 'price-high', 'discount'
 
   // Sidebar mini-search filters
@@ -134,7 +131,6 @@ export default function Shop() {
   // Reset all filters
   const handleResetAll = () => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    setSelectedMedium('all');
     setSortBy('default');
     setSearchParams(new URLSearchParams());
   };
@@ -156,23 +152,9 @@ export default function Shop() {
   const activeCategoryObj = categories.find((c) => selectedCatIds.includes(String(c.id)));
   const activePublicationObj = publications.find((p) => String(p.id) === String(selectedPublication));
 
-  // Compute products filtered by medium and sorted
+  // Compute products sorted and prioritized
   const displayedProducts = useMemo(() => {
     let list = [...products];
-
-    // Medium filter
-    if (selectedMedium !== 'all') {
-      list = list.filter((p) => {
-        const med = detectProductMedium(p);
-        if (selectedMedium === 'telugu') {
-          return med === 'Telugu Medium' || med === 'Bilingual';
-        }
-        if (selectedMedium === 'english') {
-          return med === 'English Medium' || med === 'Bilingual';
-        }
-        return true;
-      });
-    }
 
     // Sorting
     if (sortBy === 'price-low') {
@@ -181,13 +163,34 @@ export default function Shop() {
       list.sort((a, b) => (parseFloat(b.total_price || b.price) || 0) - (parseFloat(a.total_price || a.price) || 0));
     } else if (sortBy === 'discount') {
       list.sort((a, b) => (parseFloat(b.discount) || 0) - (parseFloat(a.discount) || 0));
+    } else if (searchParam && searchParam.trim() && sortBy === 'default') {
+      // Prioritize books starting with the search letter / query
+      const q = searchParam.trim().toLowerCase();
+      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const wordRegex = new RegExp(`(^|\\s|\\(|\\/|\\[)${escapeRegex(q)}`, 'i');
+
+      list.sort((a, b) => {
+        const aName = (a.name || a.title || '').toLowerCase().trim();
+        const bName = (b.name || b.title || '').toLowerCase().trim();
+        const aStarts = aName.startsWith(q);
+        const bStarts = bName.startsWith(q);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+
+        const aWord = wordRegex.test(aName);
+        const bWord = wordRegex.test(bName);
+        if (aWord && !bWord) return -1;
+        if (!aWord && bWord) return 1;
+
+        return (b.id || 0) - (a.id || 0);
+      });
     }
 
     return list;
-  }, [products, selectedMedium, sortBy]);
+  }, [products, sortBy, searchParam]);
 
   const hasActiveFilters = Boolean(
-    searchParam || selectedCategory || selectedPublication || featured || selectedMedium !== 'all' || sortBy !== 'default'
+    searchParam || selectedCategory || selectedPublication || featured || sortBy !== 'default'
   );
 
   return (
@@ -231,9 +234,18 @@ export default function Shop() {
 
       {/* ================= QUICK EXAM FILTER PILLS (1-Tap Filtering) ================= */}
       <div className="space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-600">
-          <Sparkles className="w-3.5 h-3.5 text-red-600" />
-          <span>Quick Exam Select:</span>
+        <div className="flex items-center justify-between gap-2 text-xs font-extrabold text-slate-600">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-red-600" />
+            <span>Quick Exam Select:</span>
+          </div>
+          <button
+            onClick={() => setIsMobileFiltersOpen(true)}
+            className="lg:hidden inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 text-white text-[11px] font-bold cursor-pointer shadow-xs active:scale-95 transition-transform"
+          >
+            <Filter className="w-3 h-3" />
+            <span>All Exams</span>
+          </button>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {QUICK_EXAM_PILLS.map((pill) => {
@@ -252,76 +264,6 @@ export default function Shop() {
               </button>
             );
           })}
-        </div>
-      </div>
-
-      {/* ================= MEDIUM & SORT CONTROLS BAR ================= */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white rounded-2xl border border-slate-200/90 shadow-2xs">
-        {/* Medium Filter Pills (Telugu / English / All) */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider hidden sm:inline">Medium:</span>
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
-            <button
-              onClick={() => setSelectedMedium('all')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                selectedMedium === 'all'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              All Mediums
-            </button>
-            <button
-              onClick={() => setSelectedMedium('telugu')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                selectedMedium === 'telugu'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-emerald-700'
-              }`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span>Telugu Medium (T/M)</span>
-            </button>
-            <button
-              onClick={() => setSelectedMedium('english')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                selectedMedium === 'english'
-                  ? 'bg-sky-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-sky-700'
-              }`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-              <span>English Medium (E/M)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Sort Dropdown */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider hidden md:inline">Sort:</span>
-          <div className="relative">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              aria-label="Sort books by price or discount"
-              className="appearance-none bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl pl-3 pr-8 py-1.5 focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 cursor-pointer"
-            >
-              <option value="default">Default (Featured)</option>
-              <option value="price-low">Price: Low to High</option>
-              <option value="price-high">Price: High to Low</option>
-              <option value="discount">Highest Discount (%)</option>
-            </select>
-            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-
-          {/* Mobile Filter Button */}
-          <button
-            onClick={() => setIsMobileFiltersOpen(true)}
-            className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
-          >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Exams</span>
-          </button>
         </div>
       </div>
 
@@ -364,18 +306,6 @@ export default function Shop() {
                 onClick={() => handlePublicationSelect(activePublicationObj.id)}
                 className="hover:text-slate-950 cursor-pointer"
                 title="Remove publisher filter"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-          {selectedMedium !== 'all' && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-xs">
-              <span>Medium: {selectedMedium === 'telugu' ? 'Telugu Medium' : 'English Medium'}</span>
-              <button
-                onClick={() => setSelectedMedium('all')}
-                className="hover:text-emerald-950 cursor-pointer"
-                title="Remove medium filter"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -537,10 +467,10 @@ export default function Shop() {
               </div>
               <div className="space-y-1 max-w-md mx-auto">
                 <h3 className="font-black text-slate-900 text-base sm:text-lg">
-                  No books found matching {selectedMedium !== 'all' ? `the selected medium (${selectedMedium})` : searchParam ? `"${searchParam}"` : 'your filters'}
+                  No books found matching {searchParam ? `"${searchParam}"` : 'your filters'}
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-                  Try switching between Telugu Medium and English Medium, or reset filters to see all available editions.
+                  Try searching with a different exam keyword or reset filters to browse all available books.
                 </p>
               </div>
 

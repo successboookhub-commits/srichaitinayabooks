@@ -52,7 +52,7 @@ export default function Contact() {
     },
     {
       q: 'Can I visit the bookstore in person?',
-      a: 'Yes, our retail store in Dilsukhnagar, Hyderabad is open 7 days a week from 10:00 AM to 9:00 PM.'
+      a: 'Yes, our retail store in Dilsukhnagar, Hyderabad is open from 10:00 AM to 6:00 PM. You can also call or message us for orders and enquiries.'
     }
   ];
 
@@ -386,10 +386,10 @@ export default function Contact() {
                   <div>
                     <h3 className="text-xs font-bold text-slate-800">Store Hours</h3>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      Monday to Sunday: <span className="font-semibold text-slate-900">10:00 AM – 9:00 PM</span>
+                      Store Time: <span className="font-semibold text-slate-900">10:00 AM – 6:00 PM</span>
                     </p>
                     <p className="text-[11px] text-emerald-600 font-medium mt-0.5">
-                      Open all 7 days including government holidays
+                      Call or message for orders & enquiries
                     </p>
                   </div>
                 </div>

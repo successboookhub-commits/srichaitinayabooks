@@ -4,7 +4,6 @@ import { ShoppingBag, Zap, Check, Heart } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore.js';
 import { useWishlistStore } from '../store/useWishlistStore.js';
 import { getImageUrl } from '../services/api.js';
-import { detectProductMedium, getMediumBadge } from '../utils/mediumDetector.js';
 
 export default function ProductCard({ product }) {
   const addItem = useCartStore((state) => state.addItem);
@@ -22,9 +21,6 @@ export default function ProductCard({ product }) {
   const discountPercent = product.discount || (oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : 0);
   const image = product.main_photo || product.image;
   const linkPath = product.slug ? `/product/${product.slug}` : `/product/${product.id}`;
-
-  const medium = detectProductMedium(product);
-  const mediumBadge = getMediumBadge(medium);
 
   const handleAddToCart = (e) => {
     e.preventDefault();
@@ -99,16 +95,6 @@ export default function ProductCard({ product }) {
       {/* Book Information & Bottom Price/Action */}
       <div className="p-2.5 sm:p-3.5 flex-1 flex flex-col justify-between bg-white">
         <div>
-          {/* Medium Badge (Telugu / English Medium) */}
-          <div className="mb-1">
-            <span
-              className={`inline-flex items-center gap-1 text-[9px] sm:text-[9.5px] font-bold px-1.5 py-0.5 rounded border ${mediumBadge.classes}`}
-            >
-              <span className={`w-1 h-1 rounded-full ${mediumBadge.dot}`} />
-              <span>{mediumBadge.label}</span>
-            </span>
-          </div>
-
           <h3 className="font-extrabold text-xs sm:text-[13px] text-slate-800 group-hover:text-red-600 transition-colors line-clamp-2 leading-snug min-h-[2rem] sm:min-h-[2.3rem]">
             {name}
           </h3>
@@ -120,40 +106,46 @@ export default function ProductCard({ product }) {
           )}
         </div>
 
-        {/* Price & Action Row */}
-        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
-          <div className="min-w-0 flex flex-col">
-            <span className="text-xs sm:text-sm md:text-base font-black text-red-600 leading-none truncate">
-              ₹{price.toFixed(2)}
+        {/* Price Row */}
+        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-baseline gap-2">
+          <span className="text-sm sm:text-base font-black text-red-600 leading-none">
+            ₹{price.toFixed(2)}
+          </span>
+          {oldPrice > price && (
+            <span className="text-[11px] sm:text-xs text-slate-400 line-through leading-none">
+              ₹{oldPrice.toFixed(2)}
             </span>
-            {oldPrice > price && (
-              <span className="text-[10px] sm:text-xs text-slate-400 line-through leading-tight mt-0.5 truncate">
-                ₹{oldPrice.toFixed(2)}
-              </span>
-            )}
-          </div>
-
-          {/* Quick Add Button */}
-          <button
-            type="button"
-            onClick={handleAddToCart}
-            disabled={isOutOfStock}
-            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-xs ${
-              isOutOfStock
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : isInCart
-                ? 'bg-emerald-600 text-white shadow-emerald-600/20'
-                : 'bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white shadow-red-500/20 active:scale-90'
-            }`}
-            title={isInCart ? 'In Bag' : 'Add to Bag'}
-          >
-            {isInCart ? (
-              <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
-            ) : (
-              <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            )}
-          </button>
+          )}
         </div>
+
+        {/* Add to Cart Button with Full Clear Text */}
+        <button
+          type="button"
+          onClick={handleAddToCart}
+          disabled={isOutOfStock}
+          className={`w-full mt-2 py-2 sm:py-2.5 px-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 text-xs sm:text-[12.5px] font-extrabold cursor-pointer shadow-xs active:scale-97 select-none ${
+            isOutOfStock
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+              : isInCart
+              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
+              : 'bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white shadow-red-500/25 hover:shadow-md'
+          }`}
+          title={isInCart ? 'In Cart' : 'Add to Cart'}
+        >
+          {isOutOfStock ? (
+            <span>Out of Stock</span>
+          ) : isInCart ? (
+            <>
+              <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+              <span>Added ({cartItem?.qty || 1})</span>
+            </>
+          ) : (
+            <>
+              <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Add to Cart</span>
+            </>
+          )}
+        </button>
       </div>
     </Link>
   );

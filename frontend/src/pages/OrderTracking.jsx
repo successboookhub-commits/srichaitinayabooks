@@ -616,7 +616,7 @@ export default function OrderTracking() {
               <div className="space-y-1 text-center sm:text-left">
                 <h4 className="font-black text-base sm:text-lg">Need Immediate Tracking Help?</h4>
                 <p className="text-xs text-red-100">
-                  Our dispatch center is active 7 days a week from 10:00 AM to 9:00 PM.
+                  Store Time: 10:00 AM to 6:00 PM • Call or message for orders & enquiries.
                 </p>
               </div>
 

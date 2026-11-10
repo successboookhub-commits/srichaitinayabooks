@@ -4,7 +4,7 @@ import {
   MapPin,
   Phone,
   Mail,
-  ShieldCheck,
+  PackageCheck,
   Truck,
   Zap,
   Clock,
@@ -26,46 +26,46 @@ export default function Footer() {
 
       <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
         
-        {/* ================= COMPACT TRUST RIBBON (Ultra-sleek micro-badges) ================= */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 pb-6 border-b border-slate-800/70">
-          <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5 hover:border-red-500/30 transition-all group">
+        {/* ================= COMPACT TRUST RIBBON (Clean, uncropped badges) ================= */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 pb-6 border-b border-slate-800/70">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-red-500/30 transition-all group">
             <div className="w-8 h-8 rounded-lg bg-red-600/15 border border-red-500/20 flex items-center justify-center text-red-500 shrink-0 group-hover:scale-110 transition-transform">
               <Truck className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h5 className="text-white font-bold text-xs truncate">Fast Express Shipping</h5>
-              <p className="text-[10.5px] text-slate-400 truncate">Across Telangana & AP</p>
+              <h5 className="text-white font-bold text-xs leading-snug">Fast Express Shipping</h5>
+              <p className="text-[11px] text-slate-400 leading-snug mt-0.5">Across Telangana & AP (24H Dispatch)</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5 hover:border-emerald-500/30 transition-all group">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-emerald-500/30 transition-all group">
             <div className="w-8 h-8 rounded-lg bg-emerald-600/15 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 group-hover:scale-110 transition-transform">
-              <ShieldCheck className="w-4 h-4" />
+              <PackageCheck className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h5 className="text-white font-bold text-xs truncate">100% Genuine Books</h5>
-              <p className="text-[10.5px] text-slate-400 truncate">Official Publisher Stock</p>
+              <h5 className="text-white font-bold text-xs leading-snug">Moisture-Proof Packing</h5>
+              <p className="text-[11px] text-slate-400 leading-snug mt-0.5">Safe & Secure Courier Delivery</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5 hover:border-amber-500/30 transition-all group">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-amber-500/30 transition-all group">
             <div className="w-8 h-8 rounded-lg bg-amber-600/15 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-110 transition-transform">
               <Zap className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h5 className="text-white font-bold text-xs truncate">WhatsApp Updates</h5>
-              <p className="text-[10.5px] text-slate-400 truncate">Instant PDF Invoices</p>
+              <h5 className="text-white font-bold text-xs leading-snug">Instant Order Tracking</h5>
+              <p className="text-[11px] text-slate-400 leading-snug mt-0.5">Live SMS & Consignment Updates</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5 hover:border-sky-500/30 transition-all group">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-sky-500/30 transition-all group">
             <div className="w-8 h-8 rounded-lg bg-sky-600/15 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0 group-hover:scale-110 transition-transform">
               <Clock className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h5 className="text-white font-bold text-xs truncate">Direct Helpline</h5>
-              <a href="tel:09177110134" className="text-[10.5px] text-slate-400 hover:text-white transition-colors truncate block">
-                09177110134 (10AM - 9PM)
+              <h5 className="text-white font-bold text-xs leading-snug">Orders & Enquiries</h5>
+              <a href="tel:09177110134" className="text-[11px] text-slate-400 hover:text-white transition-colors leading-snug block mt-0.5">
+                09177110134 (Store Time: 10 AM - 6 PM)
               </a>
             </div>
           </div>
@@ -278,9 +278,13 @@ export default function Footer() {
                 <span className="leading-snug">Konark Theatre Ln, opp. ICICI ATM, Dilsukhnagar, Hyd - 500060</span>
               </li>
               <li className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="leading-snug text-slate-300 font-semibold">Store Time: 10:00 AM – 6:00 PM</span>
+              </li>
+              <li className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <a href="tel:09177110134" className="hover:text-white font-bold text-white transition-colors">
-                  09177110134
+                  09177110134 (Call or Message)
                 </a>
               </li>
               <li className="flex items-center gap-2">

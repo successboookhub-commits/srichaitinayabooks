@@ -36,7 +36,6 @@ export default function Checkout() {
     pincode: '',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState('online'); // 'online' or 'cod'
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -121,48 +120,10 @@ export default function Checkout() {
 
     setIsProcessing(true);
 
-    // CASH ON DELIVERY (COD) FLOW
-    if (paymentMethod === 'cod') {
-      try {
-        const orderRes = await api.post('/orders', {
-          cart,
-          checkoutData: { ...formData, phone: cleanPhone, pincode: cleanPincode },
-          payment_method: 'COD',
-        });
-
-        if (orderRes.data.success) {
-          clearCart();
-          navigate(`/order-success/${orderRes.data.orderId}`, {
-            state: {
-              order: {
-                order_code: orderRes.data.orderCode,
-                customer_name: formData.name,
-                customer_phone: cleanPhone,
-                total_amount: parseFloat(total).toFixed(2),
-                payment_status: 'Pending',
-                payment_method: 'Cash on Delivery',
-              },
-              orderCode: orderRes.data.orderCode,
-              phone: cleanPhone,
-              name: formData.name,
-            },
-          });
-        } else {
-          setErrorMessage(orderRes.data.message || 'Failed to place order.');
-          setIsProcessing(false);
-        }
-      } catch (err) {
-        console.error(err);
-        setErrorMessage(err.response?.data?.message || 'Failed to process order. Please try again.');
-        setIsProcessing(false);
-      }
-      return;
-    }
-
-    // ONLINE RAZORPAY PAYMENT FLOW
+    // ONLINE RAZORPAY PAYMENT FLOW (Prepaid only)
     const isLoaded = await loadRazorpayScript();
     if (!isLoaded || !window.Razorpay) {
-      setErrorMessage('Razorpay payment gateway failed to load. Please check your internet connection or try Cash on Delivery.');
+      setErrorMessage('Payment gateway failed to load. Please check your internet connection and try again.');
       setIsProcessing(false);
       return;
     }
@@ -495,59 +456,35 @@ export default function Checkout() {
               </div>
             </div>
 
-            {/* Payment Method Selector */}
-            <div className="pt-2 space-y-2">
-              <label className="block text-xs font-bold text-gray-700">Choose Payment Method</label>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('online')}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    paymentMethod === 'online'
-                      ? 'border-blue-600 bg-blue-50/60 text-blue-900 font-bold ring-2 ring-blue-500/20'
-                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <p className="font-bold flex items-center justify-between">
-                    <span>Razorpay UPI</span>
-                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Instant</span>
-                  </p>
-                  <p className="text-[10.5px] text-gray-500 mt-0.5">UPI, Cards, NetBanking</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('cod')}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    paymentMethod === 'cod'
-                      ? 'border-emerald-600 bg-emerald-50/60 text-emerald-900 font-bold ring-2 ring-emerald-500/20'
-                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <p className="font-bold flex items-center justify-between">
-                    <span>Pay on Delivery</span>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">COD</span>
-                  </p>
-                  <p className="text-[10.5px] text-gray-500 mt-0.5">Cash / UPI at doorstep</p>
-                </button>
+            {/* Secure Payment Mode */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50/70 via-slate-50 to-white border border-emerald-200/70 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Instant Online Payment (Prepaid Only)</span>
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white px-2 py-0.5 rounded-md">
+                  Express Dispatch
+                </span>
               </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Pay securely via UPI (PhonePe, Google Pay, Paytm), Debit/Credit Cards & NetBanking with 256-Bit SSL encryption.
+              </p>
             </div>
 
             <button
               type="submit"
               form="checkout-form"
               disabled={isProcessing}
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-sm shadow-xl shadow-blue-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-[0.98]"
+              className="w-full py-4 rounded-xl bg-gradient-to-r from-red-600 via-red-700 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-extrabold text-sm shadow-xl shadow-red-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-[0.98] cursor-pointer"
             >
               {isProcessing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Processing Order...</span>
+                  <span>Connecting to Secure Gateway...</span>
                 </>
-              ) : paymentMethod === 'online' ? (
-                <span>Pay ₹{parseFloat(total).toFixed(2)} via Razorpay</span>
               ) : (
-                <span>Confirm Order (COD) • ₹{parseFloat(total).toFixed(2)}</span>
+                <span>Pay ₹{parseFloat(total).toFixed(2)} via UPI / Cards / NetBanking</span>
               )}
             </button>
 

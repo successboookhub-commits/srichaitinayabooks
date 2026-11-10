@@ -110,7 +110,6 @@ export default function ProductDetail() {
         days: '2 - 3 Days',
         date: dateStr,
         courier: 'DTDC Express & India Post Speed Post',
-        cod: true,
         fast: true,
       });
     } else {
@@ -119,7 +118,6 @@ export default function ProductDetail() {
         days: '4 - 6 Days',
         date: dateStr,
         courier: 'India Post Registered / DTDC Surface',
-        cod: true,
         fast: false,
       });
     }
@@ -472,7 +470,7 @@ export default function ProductDetail() {
                     </div>
                     <div className="text-[11px] text-emerald-800/90 flex flex-wrap items-center gap-2">
                       <span>• Partner: {pincodeResult.courier}</span>
-                      <span>• Cash on Delivery Available</span>
+                      <span>• Express Courier Dispatch</span>
                       <span>• Direct Hub Dispatch</span>
                     </div>
                   </div>

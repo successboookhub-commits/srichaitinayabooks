@@ -47,8 +47,8 @@ export default function Contact() {
       a: 'Orders confirmed before 2:00 PM are dispatched on the same day via Express courier with an SMS/WhatsApp tracking link.'
     },
     {
-      q: 'Do you offer Cash on Delivery (COD)?',
-      a: 'Yes, Cash on Delivery is available across most serviceable pin codes throughout Telangana and Andhra Pradesh.'
+      q: 'What payment modes do you accept?',
+      a: 'We accept 100% secure online payments including UPI (Google Pay, PhonePe, Paytm), Credit/Debit Cards, and Net Banking for instant express dispatch.'
     },
     {
       q: 'Can I visit the bookstore in person?',

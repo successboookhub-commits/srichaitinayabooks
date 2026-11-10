@@ -322,7 +322,7 @@ export default function Footer() {
             <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-400">PhonePe</span>
             <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-400">RuPay</span>
             <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-400">Visa / MC</span>
-            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-bold text-emerald-400">Cash on Delivery</span>
+            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-bold text-emerald-400">NetBanking</span>
           </div>
 
           <div className="text-slate-400 flex items-center gap-1">

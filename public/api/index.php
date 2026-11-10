@@ -1648,9 +1648,14 @@ if ($path === 'orders') {
                 }
             }
 
-            $paymentMethod = $body['payment_method'] ?? 'COD';
-            $payStatus = ($paymentMethod === 'COD') ? 'Pending' : 'Paid';
-            $payId = $body['payment_id'] ?? ('COD_' . uniqid());
+            $paymentMethod = $body['payment_method'] ?? 'ONLINE';
+            if (strtoupper($paymentMethod) === 'COD') {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Cash on Delivery (COD) is disabled. Please complete payment online via UPI, Cards, or NetBanking.']);
+                exit;
+            }
+            $payStatus = 'Paid';
+            $payId = $body['payment_id'] ?? ('ONLINE_' . uniqid());
 
             $pdo->prepare('
                 INSERT INTO orders 

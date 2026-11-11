@@ -317,40 +317,76 @@ export default function ProductDetail() {
               </div>
 
               {/* Quick Book Specs Strip */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-xs">
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Publisher</span>
-                  <span className="font-extrabold text-slate-800 truncate block text-xs mt-0.5">
-                    {product.publication_name || 'Official Edition'}
-                  </span>
-                </div>
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Dispatch</span>
-                  <span className="font-extrabold text-slate-800 truncate block text-xs mt-0.5">
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+                <div className="bg-slate-50/90 p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block">Dispatch</span>
+                  <span className="font-extrabold text-slate-800 block text-xs mt-0.5">
                     Within 24 Hours
                   </span>
                 </div>
-                <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Delivery</span>
-                  <span className="font-extrabold text-emerald-700 truncate block text-xs mt-0.5">
+                <div className="bg-slate-50/90 p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block">Delivery Partner</span>
+                  <span className="font-extrabold text-emerald-700 block text-xs mt-0.5">
                     Indian Post
                   </span>
                 </div>
               </div>
 
-              {/* Trust Guarantees */}
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 font-medium pt-1">
-                <div className="flex items-center gap-1.5">
-                  <Truck className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                  <span>Indian Post Delivery (5-6 Days)</span>
+              {/* Delivery & Packing Guarantees (No Truncation / No Ellipsis) */}
+              <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl p-2.5 flex items-center gap-2 shadow-2xs">
+                  <div className="w-7 h-7 rounded-lg bg-red-100/80 text-red-600 flex items-center justify-center shrink-0">
+                    <Truck className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-bold text-slate-900 text-[11px] block leading-tight">Indian Post</span>
+                    <span className="text-[10px] text-slate-500 font-medium block leading-tight mt-0.5">5–6 Days Delivery</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <PackageCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span>Moisture-proof packing</span>
+
+                <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl p-2.5 flex items-center gap-2 shadow-2xs">
+                  <div className="w-7 h-7 rounded-lg bg-blue-100/80 text-blue-600 flex items-center justify-center shrink-0">
+                    <PackageCheck className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-bold text-slate-900 text-[11px] block leading-tight">Moisture-Proof</span>
+                    <span className="text-[10px] text-slate-500 font-medium block leading-tight mt-0.5">Safe Packaging</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 col-span-2 text-slate-700">
-                  <Phone className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>Call or Message for Orders & Enquiries: <strong className="text-slate-900">09177110134</strong> (10 AM to 6 PM)</span>
+              </div>
+
+              {/* Orders & Enquiries Support Card */}
+              <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl p-2.5 sm:p-3 shadow-2xs">
+                <div className="flex items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                      <Phone className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold text-amber-950 leading-tight">
+                        Call or Message for Orders &amp; Enquiries:
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <a
+                          href="tel:09177110134"
+                          className="text-xs sm:text-sm font-black text-slate-900 hover:text-red-600 transition-colors tracking-wide whitespace-nowrap"
+                        >
+                          09177110134
+                        </a>
+                        <span className="text-[9.5px] font-bold text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-md whitespace-nowrap inline-block">
+                          10 AM to 6 PM
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <a
+                    href="tel:09177110134"
+                    className="inline-flex items-center gap-1 bg-slate-900 hover:bg-red-600 text-white text-xs font-bold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all shadow-xs shrink-0 active:scale-95 whitespace-nowrap"
+                  >
+                    <span>Call</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </a>
                 </div>
               </div>
 

@@ -302,6 +302,7 @@ if ($path === 'categories' || $path === 'categories/admin') {
         exit;
     }
     if ($method === 'POST') {
+        clearStoreCache();
         $name = trim($body['name'] ?? $_POST['name'] ?? '');
         if (empty($name)) {
             http_response_code(400);
@@ -319,6 +320,7 @@ if ($path === 'categories' || $path === 'categories/admin') {
 if (preg_match('#^categories/(\d+)$#', $path, $m)) {
     $id = intval($m[1]);
     if ($method === 'PUT') {
+        clearStoreCache();
         $name = trim($body['name'] ?? $_POST['name'] ?? '');
         $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $name), '-'));
         $pdo->prepare('UPDATE categories SET name = ?, slug = ?, updated_at = NOW() WHERE id = ?')->execute([$name, $slug, $id]);
@@ -326,6 +328,7 @@ if (preg_match('#^categories/(\d+)$#', $path, $m)) {
         exit;
     }
     if ($method === 'DELETE') {
+        clearStoreCache();
         $pdo->prepare('DELETE FROM categories WHERE id = ?')->execute([$id]);
         echo json_encode(['success' => true, 'message' => 'Category deleted.']);
         exit;
@@ -347,6 +350,7 @@ if ($path === 'publications' || $path === 'publications/admin') {
         exit;
     }
     if ($method === 'POST') {
+        clearStoreCache();
         $name = trim($body['name'] ?? $_POST['name'] ?? '');
         if (empty($name)) {
             http_response_code(400);
@@ -363,12 +367,14 @@ if ($path === 'publications' || $path === 'publications/admin') {
 if (preg_match('#^publications/(\d+)$#', $path, $m)) {
     $id = intval($m[1]);
     if ($method === 'PUT') {
+        clearStoreCache();
         $name = trim($body['name'] ?? $_POST['name'] ?? '');
         $pdo->prepare('UPDATE publications SET name = ?, updated_at = NOW() WHERE id = ?')->execute([$name, $id]);
         echo json_encode(['success' => true, 'message' => 'Publication updated.']);
         exit;
     }
     if ($method === 'DELETE') {
+        clearStoreCache();
         $pdo->prepare('DELETE FROM publications WHERE id = ?')->execute([$id]);
         echo json_encode(['success' => true, 'message' => 'Publication deleted.']);
         exit;
@@ -1361,6 +1367,41 @@ function sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $tota
 }
 
 // -------------------------------------------------------------
+// SERVE ORDER TAX INVOICE PDF (Admin View / Customer Download)
+// -------------------------------------------------------------
+if (preg_match('#^(order-history/invoice|invoices)/([a-zA-Z0-9_-]+)$#', $path, $m)) {
+    $orderCode = strtoupper($m[2]);
+    $invoiceDir = dirname(__DIR__) . '/invoices';
+    if (!is_dir($invoiceDir)) {
+        @mkdir($invoiceDir, 0755, true);
+    }
+    $invoiceFile = $invoiceDir . '/' . $orderCode . '.pdf';
+
+    // If PDF doesn't exist yet, generate it on-demand
+    if (!file_exists($invoiceFile)) {
+        $stmt = $pdo->prepare('SELECT id FROM orders WHERE order_code = ? OR id = ? LIMIT 1');
+        $stmt->execute([$orderCode, is_numeric($orderCode) ? intval($orderCode) : -1]);
+        $ord = $stmt->fetch();
+        if ($ord) {
+            generateOrderInvoicePdf($pdo, $ord['id'], $invoiceFile);
+        }
+    }
+
+    if (file_exists($invoiceFile)) {
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="Invoice_' . $orderCode . '.pdf"');
+        header('Content-Length: ' . filesize($invoiceFile));
+        header('Cache-Control: public, max-age=86400');
+        readfile($invoiceFile);
+        exit;
+    } else {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => 'Invoice PDF could not be generated for ' . $orderCode]);
+        exit;
+    }
+}
+
+// -------------------------------------------------------------
 // CHECKOUT & PAYMENT (Totals, Razorpay Create & Verify)
 // -------------------------------------------------------------
 if ($path === 'checkout/totals' && $method === 'POST') {
@@ -1807,6 +1848,7 @@ if ($path === 'orders') {
             }
 
             $pdo->commit();
+            clearStoreCache();
 
             // Send official WhatsApp Order Confirmation & Invoice PDF via BhashSMS
             sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $totals['total'], $payStatus);
@@ -2044,6 +2086,7 @@ if ($path === 'orders/bulk-status' && $method === 'POST') {
         $inClause = implode(',', array_fill(0, count($orderIds), '?'));
         $stmt = $pdo->prepare("UPDATE orders SET order_status = ?, updated_at = NOW() WHERE id IN ($inClause)");
         $stmt->execute(array_merge([$newStatus], array_map('intval', $orderIds)));
+        clearStoreCache();
         echo json_encode(['success' => true, 'message' => count($orderIds) . ' order(s) updated to ' . $newStatus]);
         exit;
     }
@@ -2063,6 +2106,7 @@ if ($path === 'orders/bulk-status-by-date' && $method === 'POST') {
         $stmt = $pdo->prepare("UPDATE orders SET order_status = ?, updated_at = NOW() WHERE created_at >= ? AND created_at <= ?");
         $stmt->execute([$newStatus, $fromVal, $toVal]);
         $affected = $stmt->rowCount();
+        clearStoreCache();
         echo json_encode(['success' => true, 'message' => $affected . ' order(s) updated to ' . $newStatus]);
         exit;
     }
@@ -2095,6 +2139,7 @@ if (preg_match('#^orders/(\d+)$#', $path, $m)) {
         exit;
     }
     if ($method === 'DELETE') {
+        clearStoreCache();
         $pdo->prepare('DELETE FROM order_items WHERE order_id = ?')->execute([$orderId]);
         $pdo->prepare('DELETE FROM orders WHERE id = ?')->execute([$orderId]);
         echo json_encode(['success' => true, 'message' => 'Order deleted.']);
@@ -2106,6 +2151,7 @@ if (preg_match('#^orders/(\d+)/status$#', $path, $m) && $method === 'PUT') {
     $orderId = intval($m[1]);
     $newStatus = $body['status'] ?? $body['order_status'] ?? 'Processing';
     $pdo->prepare('UPDATE orders SET order_status = ?, updated_at = NOW() WHERE id = ?')->execute([$newStatus, $orderId]);
+    clearStoreCache();
     echo json_encode(['success' => true, 'message' => 'Order status updated.']);
     exit;
 }

@@ -92,12 +92,32 @@ function getRazorpayConfig() {
 function getDbConfig() {
     $isLocal = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1', 'localhost:5000', 'localhost:5173']);
 
+    $dbHost = getEnvVal('DB_HOST');
+    if (empty($dbHost) || ($dbHost === '127.0.0.1' && !$isLocal)) {
+        $dbHost = $isLocal ? '127.0.0.1' : 'localhost';
+    }
+
+    $dbUser = getEnvVal('DB_USER') ?: getEnvVal('DB_USERNAME');
+    if (empty($dbUser) || ($dbUser === 'root' && !$isLocal)) {
+        $dbUser = 'u803044110_sri_user';
+    }
+
+    $dbPass = getEnvVal('DB_PASSWORD');
+    if (empty($dbPass) && !$isLocal) {
+        $dbPass = 'SriChaitanya@2026';
+    }
+
+    $dbName = getEnvVal('DB_NAME') ?: getEnvVal('DB_DATABASE');
+    if (empty($dbName) || ($dbName === 'u302322072_bookcom123' && !$isLocal)) {
+        $dbName = 'u803044110_srichaitanya';
+    }
+
     return [
-        'host'       => getEnvVal('DB_HOST', $isLocal ? '127.0.0.1' : 'localhost'),
+        'host'       => $dbHost,
         'port'       => getEnvVal('DB_PORT', '3306'),
-        'user'       => getEnvVal('DB_USER', $isLocal ? 'root' : 'u803044110_sri_user'),
-        'pass'       => getEnvVal('DB_PASSWORD', $isLocal ? '' : 'SriChaitanya@2026'),
-        'name'       => getEnvVal('DB_NAME', $isLocal ? 'u302322072_bookcom123' : 'u803044110_srichaitanya'),
+        'user'       => $dbUser,
+        'pass'       => $dbPass,
+        'name'       => $dbName,
         'jwt_secret' => getEnvVal('JWT_SECRET', 'srichaitanya_super_secure_jwt_secret_key_2026_xyz'),
     ];
 }
@@ -107,7 +127,7 @@ function getDb() {
     if ($pdo !== null) return $pdo;
 
     $cfg = getDbConfig();
-    $dsn = "mysql:host={$cfg['host']};port={$cfg['port']};dbname={$cfg['name']};charset=utf8mb4";
+    $hosts = array_unique(array_filter([$cfg['host'], 'localhost', 'srv2186.hstgr.io', '127.0.0.1']));
     
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
@@ -115,24 +135,30 @@ function getDb() {
         PDO::ATTR_EMULATE_PREPARES   => false,
     ];
 
-    try {
-        $pdo = new PDO($dsn, $cfg['user'], $cfg['pass'], $options);
-        return $pdo;
-    } catch (PDOException $e) {
-        http_response_code(500);
-        header('Content-Type: application/json');
-        echo json_encode([
-            'success' => false,
-            'message' => 'Database connection failed: ' . $e->getMessage(),
-            'debug'   => [
-                'host'        => $cfg['host'],
-                'database'    => $cfg['name'],
-                'user'        => $cfg['user'],
-                'pass_set'    => !empty($cfg['pass']),
-                'pass_length' => strlen($cfg['pass']),
-            ],
-            'hint' => 'Please verify DB_PASSWORD in your .env file on Hostinger'
-        ]);
-        exit;
+    $lastError = null;
+    foreach ($hosts as $h) {
+        try {
+            $dsn = "mysql:host={$h};port={$cfg['port']};dbname={$cfg['name']};charset=utf8mb4";
+            $pdo = new PDO($dsn, $cfg['user'], $cfg['pass'], $options);
+            return $pdo;
+        } catch (\PDOException $e) {
+            $lastError = $e;
+        }
     }
+
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Database connection failed: ' . ($lastError ? $lastError->getMessage() : 'Unknown error'),
+        'debug'   => [
+            'tried_hosts' => $hosts,
+            'database'    => $cfg['name'],
+            'user'        => $cfg['user'],
+            'pass_set'    => !empty($cfg['pass']),
+            'pass_length' => strlen($cfg['pass']),
+        ],
+        'hint' => 'Please verify DB credentials in Hostinger'
+    ]);
+    exit;
 }

@@ -4,22 +4,44 @@ DirectoryIndex index.html index.php
     RewriteEngine On
     RewriteBase /
 
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Prevent loop on api/index.php
+    RewriteRule ^(api/index\.php|public/api/index\.php|dist/api/index\.php)$ - [L]
+
     # 1. API Route - Direct execution to PHP API
+    RewriteCond %{DOCUMENT_ROOT}/api/index.php -f
+    RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+
+    RewriteCond %{DOCUMENT_ROOT}/dist/api/index.php -f
+    RewriteRule ^api/(.*)$ dist/api/index.php [QSA,L]
+
+    RewriteCond %{DOCUMENT_ROOT}/public/api/index.php -f
+    RewriteRule ^api/(.*)$ public/api/index.php [QSA,L]
+
     RewriteRule ^api/(.*)$ public/api/index.php [QSA,L]
     RewriteRule ^api/?$ public/api/index.php [QSA,L]
 
-    # 2. Static uploads, storage, and assets
-    RewriteRule ^storage/(.*)$ public/storage/$1 [L]
-    RewriteRule ^uploads/(.*)$ public/uploads/$1 [L]
-    RewriteRule ^invoices/(.*)$ public/invoices/$1 [L]
-    RewriteRule ^images/(.*)$ public/images/$1 [L]
-    RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+    # 2. Existing static file or directory
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
 
-    # 3. Direct file or directory in public/
-    RewriteCond %{DOCUMENT_ROOT}/public/$1 -f [OR]
-    RewriteCond %{DOCUMENT_ROOT}/public/$1 -d
+    # 3. Static uploads, storage, and assets
+    RewriteCond %{DOCUMENT_ROOT}/dist/$1 -f
+    RewriteRule ^(.*)$ dist/$1 [L]
+
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -f
     RewriteRule ^(.*)$ public/$1 [L]
 
     # 4. React Single Page Application (SPA) routing
+    RewriteCond %{DOCUMENT_ROOT}/dist/index.html -f
+    RewriteRule ^ dist/index.html [L]
+
+    RewriteCond %{DOCUMENT_ROOT}/public/index.html -f
     RewriteRule ^ public/index.html [L]
+
+    RewriteRule ^ index.html [L]
 </IfModule>

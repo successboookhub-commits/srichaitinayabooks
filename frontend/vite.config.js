@@ -26,22 +26,22 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'https://srichaitanya.successbookhub.com',
+        target: 'https://srichaitanybookscenter.com',
         changeOrigin: true,
         secure: false,
       },
       '/storage': {
-        target: 'https://srichaitanya.successbookhub.com',
+        target: 'https://srichaitanybookscenter.com',
         changeOrigin: true,
         secure: false,
       },
       '/uploads': {
-        target: 'https://srichaitanya.successbookhub.com',
+        target: 'https://srichaitanybookscenter.com',
         changeOrigin: true,
         secure: false,
       },
       '/invoices': {
-        target: 'https://srichaitanya.successbookhub.com',
+        target: 'https://srichaitanybookscenter.com',
         changeOrigin: true,
         secure: false,
       },

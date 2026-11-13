@@ -1,12 +1,10 @@
 import axios from 'axios';
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined' && window.location.origin ? `${window.location.origin}/api` : '/api');
+  import.meta.env.VITE_API_URL || '/api';
 
 export const SERVER_URL =
-  import.meta.env.VITE_SERVER_URL ||
-  (typeof window !== 'undefined' && window.location.origin ? window.location.origin : '');
+  import.meta.env.VITE_SERVER_URL || '';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

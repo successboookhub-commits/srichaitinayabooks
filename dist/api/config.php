@@ -58,33 +58,37 @@ function getEnvVal($key, $default = null) {
     return $default;
 }
 
-// Razorpay Configuration Helper (Reads from .env with auto-detection)
+// Razorpay Configuration Helper (Enforces LIVE keys on production domain)
 function getRazorpayConfig() {
-    $directKey = getEnvVal('RAZORPAY_KEY');
-    $directSecret = getEnvVal('RAZORPAY_SECRET');
-    if (!empty($directKey) && !empty($directSecret)) {
-        $isLive = str_starts_with($directKey, 'rzp_live_');
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    $isLiveDomain = str_contains($host, 'srichaitany');
+
+    // On live production domain, ALWAYS enforce LIVE keys so real payments work immediately
+    $rawMode = strtolower(getEnvVal('RAZORPAY_MODE', 'live'));
+    $forceLive = $isLiveDomain || ($rawMode === 'live');
+
+    if ($forceLive) {
+        $liveKey = getEnvVal('RAZORPAY_LIVE_KEY') ?: 'rzp_live_SIJDGxy85sgrKV';
+        $liveSecret = getEnvVal('RAZORPAY_LIVE_SECRET') ?: 'gj9CI3Dq9wKU5dapQR61Vyo3';
+
+        // Safeguard: If env accidentally has test key, enforce official live key
+        if (str_starts_with($liveKey, 'rzp_test_')) {
+            $liveKey = 'rzp_live_SIJDGxy85sgrKV';
+            $liveSecret = 'gj9CI3Dq9wKU5dapQR61Vyo3';
+        }
+
         return [
-            'key'    => $directKey,
-            'secret' => $directSecret,
-            'mode'   => $isLive ? 'live' : 'test',
+            'key'    => $liveKey,
+            'secret' => $liveSecret,
+            'mode'   => 'live',
         ];
     }
 
-    $mode = strtolower(getEnvVal('RAZORPAY_MODE', 'live'));
-
-    if ($mode === 'live') {
-        $key = getEnvVal('RAZORPAY_LIVE_KEY', 'rzp_live_SIJDGxy85sgrKV');
-        $secret = getEnvVal('RAZORPAY_LIVE_SECRET', 'gj9CI3Dq9wKU5dapQR61Vyo3');
-    } else {
-        $key = getEnvVal('RAZORPAY_TEST_KEY', 'rzp_test_SwedUUn1KgRMs0');
-        $secret = getEnvVal('RAZORPAY_TEST_SECRET', 'xdW2Ry7T67sUK4zMKb3oOsZh');
-    }
-
+    // Local development fallback
     return [
-        'key'    => $key,
-        'secret' => $secret,
-        'mode'   => $mode,
+        'key'    => getEnvVal('RAZORPAY_TEST_KEY', 'rzp_test_SwedUUn1KgRMs0'),
+        'secret' => getEnvVal('RAZORPAY_TEST_SECRET', 'xdW2Ry7T67sUK4zMKb3oOsZh'),
+        'mode'   => 'test',
     ];
 }
 

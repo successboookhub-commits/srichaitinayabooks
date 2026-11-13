@@ -349,11 +349,16 @@ export default function AdminOrders() {
   const handlePrintBulk = async () => {
     if (selectedIds.length === 0) return;
     try {
-      const selectedOrders = orders.filter((o) => selectedIds.includes(o.id));
-      setLabelsToPrint(selectedOrders);
+      const res = await api.get(`/orders/labels?ids=${selectedIds.join(',')}`);
+      if (res.data?.orders?.length) {
+        setLabelsToPrint(res.data.orders);
+        return;
+      }
     } catch (err) {
-      console.error(err);
+      console.warn('Labels bulk fetch error:', err);
     }
+    const selectedOrders = orders.filter((o) => selectedIds.includes(o.id));
+    setLabelsToPrint(selectedOrders);
   };
 
   const toggleSelectAll = () => {

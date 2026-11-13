@@ -49,7 +49,7 @@ export default function AdminProducts() {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', text: '' });
 
-  // Complete 16-field Product Form State matching Database Table
+  // Complete 17-field Product Form State matching Database Table
   const [form, setForm] = useState({
     name: '',
     publication_id: '',
@@ -57,6 +57,7 @@ export default function AdminProducts() {
     old_price: '',
     discount: '',
     total_price: '',
+    purchase_amount: '',
     quantity: 50,
     weight_type: 'weight', // 'weight' or 'weightless'
     weight: '0.50',
@@ -218,6 +219,7 @@ export default function AdminProducts() {
       old_price: '',
       discount: '',
       total_price: '',
+      purchase_amount: '',
       quantity: 50,
       weight_type: 'weight',
       weight: '0.50',
@@ -253,6 +255,11 @@ export default function AdminProducts() {
     const isWeightless = Boolean(product.is_weightless);
     const weightVal = product.weight ? String(product.weight) : '0.50';
 
+    const localCosts = JSON.parse(localStorage.getItem('srichaitanya_purchase_amounts') || '{}');
+    const existingCost = (product.purchase_amount !== undefined && product.purchase_amount !== null && product.purchase_amount !== '')
+      ? String(product.purchase_amount)
+      : (product.purchase_price ? String(product.purchase_price) : (localCosts[product.id] !== undefined ? String(localCosts[product.id]) : ''));
+
     setForm({
       name: product.name || product.title || '',
       publication_id: product.publication_id ? String(product.publication_id) : (publications[0]?.id ? String(publications[0].id) : ''),
@@ -260,6 +267,7 @@ export default function AdminProducts() {
       old_price: product.old_price ? String(product.old_price) : '',
       discount: product.discount ? String(product.discount) : '',
       total_price: product.total_price ? String(product.total_price) : (product.price ? String(product.price) : ''),
+      purchase_amount: existingCost,
       quantity: product.quantity !== undefined ? product.quantity : (product.stock || 50),
       weight_type: isWeightless ? 'weightless' : 'weight',
       weight: weightVal,
@@ -316,6 +324,8 @@ export default function AdminProducts() {
       formData.append('discount', form.discount || '0');
       formData.append('total_price', form.total_price);
       formData.append('price', form.total_price);
+      formData.append('purchase_amount', form.purchase_amount || '0');
+      formData.append('purchase_price', form.purchase_amount || '0');
       formData.append('quantity', form.quantity || 1);
       formData.append('stock', form.quantity || 1);
 
@@ -337,11 +347,25 @@ export default function AdminProducts() {
         await api.put(`/products/${editingProduct.id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
+        // Cache cost locally for profits reporting
+        try {
+          const localCosts = JSON.parse(localStorage.getItem('srichaitanya_purchase_amounts') || '{}');
+          localCosts[editingProduct.id] = parseFloat(form.purchase_amount || 0);
+          localStorage.setItem('srichaitanya_purchase_amounts', JSON.stringify(localCosts));
+        } catch (e) {}
         setFeedback({ type: 'success', text: `Book "${form.name}" updated successfully!` });
       } else {
-        await api.post('/products', formData, {
+        const createRes = await api.post('/products', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
+        const createdId = createRes.data?.product?.id || createRes.data?.id;
+        if (createdId) {
+          try {
+            const localCosts = JSON.parse(localStorage.getItem('srichaitanya_purchase_amounts') || '{}');
+            localCosts[createdId] = parseFloat(form.purchase_amount || 0);
+            localStorage.setItem('srichaitanya_purchase_amounts', JSON.stringify(localCosts));
+          } catch (e) {}
+        }
         setFeedback({ type: 'success', text: `New book "${form.name}" created successfully!` });
       }
 
@@ -791,6 +815,18 @@ export default function AdminProducts() {
                               )}
                             </div>
                           )}
+                          {(() => {
+                            const localCosts = JSON.parse(localStorage.getItem('srichaitanya_purchase_amounts') || '{}');
+                            const costVal = parseFloat(p.purchase_amount || p.purchase_price || localCosts[p.id] || 0);
+                            if (costVal > 0) {
+                              return (
+                                <div className="text-[10px] text-blue-700 font-bold bg-blue-50 border border-blue-200/60 px-1.5 py-0.5 rounded w-fit mt-0.5">
+                                  Cost: ₹{costVal.toFixed(2)}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                       </td>
 
@@ -1017,7 +1053,7 @@ export default function AdminProducts() {
                   <span>2. Pricing & Discount Calculation</span>
                 </h4>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div>
                     <label className="block font-bold text-slate-800 mb-1">
                       MRP / Original Price (₹) <span className="text-red-500">*</span>
@@ -1070,6 +1106,22 @@ export default function AdminProducts() {
                       onChange={(e) => setForm({ ...form, total_price: e.target.value })}
                       className="w-full p-2.5 bg-emerald-50/60 border border-emerald-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-black text-emerald-900 text-xs"
                       placeholder="479.40"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1 flex items-center justify-between">
+                      <span>Purchase Amount (₹)</span>
+                      <span className="text-[10px] text-blue-600 font-bold">Cost Price</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.purchase_amount}
+                      onChange={(e) => setForm({ ...form, purchase_amount: e.target.value })}
+                      className="w-full p-2.5 bg-blue-50/60 border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-blue-900 text-xs"
+                      placeholder="350.00"
                     />
                   </div>
                 </div>

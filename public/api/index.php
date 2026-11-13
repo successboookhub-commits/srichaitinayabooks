@@ -10,6 +10,14 @@ header('Content-Type: application/json');
 
 $pdo = getDb();
 
+// Auto-migrate: ensure purchase_amount column exists in products table
+try {
+    $colCheck = $pdo->query("SHOW COLUMNS FROM products LIKE 'purchase_amount'")->fetch();
+    if (!$colCheck) {
+        $pdo->exec("ALTER TABLE products ADD COLUMN purchase_amount DECIMAL(10,2) DEFAULT 0.00 AFTER total_price");
+    }
+} catch (\Throwable $e) {}
+
 $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/api', PHP_URL_PATH);
 $path = preg_replace('#^.*?/api/?#i', '', $uri);
 $path = trim($path, '/');
@@ -42,12 +50,14 @@ function formatProduct($p) {
     }
 
     return array_merge($p, [
-        'title'          => $p['name'] ?? $p['title'] ?? '',
-        'price'          => $p['total_price'] ?? $p['price'] ?? 0,
-        'stock'          => $p['quantity'] ?? $p['stock'] ?? 0,
-        'image'          => $p['main_photo'] ?? $p['image'] ?? '',
-        'category_ids'   => $categoryIds,
-        'related_photos' => $relatedPhotos,
+        'title'           => $p['name'] ?? $p['title'] ?? '',
+        'price'           => $p['total_price'] ?? $p['price'] ?? 0,
+        'stock'           => $p['quantity'] ?? $p['stock'] ?? 0,
+        'image'           => $p['main_photo'] ?? $p['image'] ?? '',
+        'category_ids'    => $categoryIds,
+        'related_photos'  => $relatedPhotos,
+        'purchase_amount' => floatval($p['purchase_amount'] ?? $p['purchase_price'] ?? 0),
+        'purchase_price'  => floatval($p['purchase_amount'] ?? $p['purchase_price'] ?? 0),
     ]);
 }
 
@@ -830,6 +840,7 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
     if ($method === 'POST') {
         $name = trim($_POST['name'] ?? $body['name'] ?? '');
         $price = floatval($_POST['price'] ?? $_POST['total_price'] ?? $body['price'] ?? $body['total_price'] ?? 0);
+        $purchaseAmount = floatval($_POST['purchase_amount'] ?? $_POST['purchase_price'] ?? $body['purchase_amount'] ?? $body['purchase_price'] ?? 0);
         $oldPrice = floatval($_POST['old_price'] ?? $body['old_price'] ?? 0);
         $discount = floatval($_POST['discount'] ?? $body['discount'] ?? 0);
         $stock = intval($_POST['stock'] ?? $_POST['quantity'] ?? $body['stock'] ?? $body['quantity'] ?? 10);
@@ -866,8 +877,13 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         }
 
         $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $name), '-')) . '-' . time();
-        $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
-        $stmt->execute([$name, $slug, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive]);
+        try {
+            $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, purchase_amount, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
+            $stmt->execute([$name, $slug, $price, $purchaseAmount, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive]);
+        } catch (\Throwable $e) {
+            $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
+            $stmt->execute([$name, $slug, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive]);
+        }
         clearStoreCache();
         echo json_encode(['success' => true, 'message' => 'Product added successfully.', 'id' => $pdo->lastInsertId()]);
         exit;
@@ -880,6 +896,7 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
     if ($method === 'PUT' || $method === 'POST') {
         $name = trim($_POST['name'] ?? $body['name'] ?? '');
         $price = floatval($_POST['price'] ?? $_POST['total_price'] ?? $body['price'] ?? $body['total_price'] ?? 0);
+        $purchaseAmount = floatval($_POST['purchase_amount'] ?? $_POST['purchase_price'] ?? $body['purchase_amount'] ?? $body['purchase_price'] ?? 0);
         $oldPrice = floatval($_POST['old_price'] ?? $body['old_price'] ?? 0);
         $discount = floatval($_POST['discount'] ?? $body['discount'] ?? 0);
         $stock = intval($_POST['stock'] ?? $_POST['quantity'] ?? $body['stock'] ?? $body['quantity'] ?? 10);
@@ -913,11 +930,21 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
         }
 
         if ($imagePath) {
-            $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, weight = ?, shipping_charge = ?, is_weightless = ?, main_photo = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
-            $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive, $id]);
+            try {
+                $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, purchase_amount = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, weight = ?, shipping_charge = ?, is_weightless = ?, main_photo = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$name, $price, $purchaseAmount, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive, $id]);
+            } catch (\Throwable $e) {
+                $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, weight = ?, shipping_charge = ?, is_weightless = ?, main_photo = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive, $id]);
+            }
         } else {
-            $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, weight = ?, shipping_charge = ?, is_weightless = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
-            $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $isFeatured, $isActive, $id]);
+            try {
+                $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, purchase_amount = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, weight = ?, shipping_charge = ?, is_weightless = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$name, $price, $purchaseAmount, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $isFeatured, $isActive, $id]);
+            } catch (\Throwable $e) {
+                $stmt = $pdo->prepare('UPDATE products SET name = ?, total_price = ?, old_price = ?, discount = ?, quantity = ?, publication_id = ?, category_ids = ?, description = ?, weight = ?, shipping_charge = ?, is_weightless = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $isFeatured, $isActive, $id]);
+            }
         }
         clearStoreCache();
         echo json_encode(['success' => true, 'message' => 'Product updated successfully.']);
@@ -1331,15 +1358,15 @@ function sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $tota
             generateOrderInvoicePdf($pdo, $orderId, $invoiceFile);
         }
 
-        $domain = 'https://srichaitanya.successbookhub.com';
+        $domain = getEnvVal('APP_URL', 'https://srichaitanya.successbookhub.com');
         $invoiceUrl = $domain . '/invoices/' . $orderCode . '.pdf';
 
         $query = [
-            'user'     => 'Azsofttech_BW',
-            'pass'     => '12345678',
-            'sender'   => 'BUZWAP',
+            'user'     => getEnvVal('BHASHSMS_USER', 'Azsofttech_BW'),
+            'pass'     => getEnvVal('BHASHSMS_PASS', '12345678'),
+            'sender'   => getEnvVal('BHASHSMS_SENDER', 'BUZWAP'),
             'phone'    => $formattedPhone,
-            'text'     => 'ord_ch01',
+            'text'     => getEnvVal('BHASHSMS_TEMPLATE', 'ord_ch01'),
             'priority' => 'wa',
             'stype'    => 'normal',
             'Params'   => $params,
@@ -2176,6 +2203,135 @@ if (preg_match('#^orders/([a-zA-Z0-9_-]+)/whatsapp$#', $path, $m)) {
     $targetPhone = $body['phone'] ?? $_GET['phone'] ?? $ord['customer_phone'];
     $res = sendOrderWhatsAppNotification($pdo, $ord['id'], $ord['order_code'], $targetPhone, $ord['total'], $ord['status']);
     echo json_encode(['success' => true, 'response' => $res, 'phone' => $targetPhone]);
+    exit;
+}
+
+// -------------------------------------------------------------
+// PROFITS & MARGINS REPORT (Admin Analytics)
+// -------------------------------------------------------------
+if ($path === 'admin/profits' || $path === 'profits') {
+    $dateFrom = trim($_GET['date_from'] ?? '');
+    $dateTo = trim($_GET['date_to'] ?? '');
+    $search = trim($_GET['search'] ?? '');
+
+    $where = "WHERE (o.order_status IS NULL OR LOWER(o.order_status) NOT IN ('cancelled', 'canceled'))";
+    $params = [];
+
+    if (!empty($dateFrom)) {
+        $where .= " AND o.created_at >= ?";
+        $params[] = (strpos($dateFrom, ':') !== false) ? $dateFrom : ($dateFrom . ' 00:00:00');
+    }
+    if (!empty($dateTo)) {
+        $where .= " AND o.created_at <= ?";
+        $params[] = (strpos($dateTo, ':') !== false) ? $dateTo : ($dateTo . ' 23:59:59');
+    }
+    if (!empty($search)) {
+        $where .= " AND (oi.product_name LIKE ? OR p.name LIKE ?)";
+        $params[] = "%{$search}%";
+        $params[] = "%{$search}%";
+    }
+
+    // 1. Per-Book Profit Breakdown
+    $sqlBooks = "
+        SELECT 
+            oi.product_id,
+            COALESCE(p.name, oi.product_name) AS book_title,
+            p.main_photo,
+            COALESCE(p.purchase_amount, 0) AS purchase_amount,
+            COUNT(DISTINCT o.id) AS orders_count,
+            SUM(oi.qty) AS total_sold_qty,
+            ROUND(AVG(oi.price), 2) AS avg_selling_price,
+            ROUND(SUM(oi.total), 2) AS total_revenue,
+            ROUND(SUM(COALESCE(p.purchase_amount, 0) * oi.qty), 2) AS total_purchase_cost,
+            ROUND(SUM(oi.total - (COALESCE(p.purchase_amount, 0) * oi.qty)), 2) AS net_profit
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        LEFT JOIN products p ON p.id = oi.product_id
+        {$where}
+        GROUP BY oi.product_id, book_title, p.main_photo, purchase_amount
+        ORDER BY net_profit DESC
+    ";
+
+    $stmtBooks = $pdo->prepare($sqlBooks);
+    $stmtBooks->execute($params);
+    $bookRows = $stmtBooks->fetchAll();
+
+    $booksReport = [];
+    $totalRevenue = 0.0;
+    $totalPurchaseCost = 0.0;
+    $totalNetProfit = 0.0;
+    $totalUnitsSold = 0;
+
+    foreach ($bookRows as $b) {
+        $rev = floatval($b['total_revenue']);
+        $cost = floatval($b['total_purchase_cost']);
+        $profit = floatval($b['net_profit']);
+        $qty = intval($b['total_sold_qty']);
+        $margin = $rev > 0 ? round(($profit / $rev) * 100, 1) : 0.0;
+        $unitProfit = $qty > 0 ? round($profit / $qty, 2) : 0.0;
+
+        $totalRevenue += $rev;
+        $totalPurchaseCost += $cost;
+        $totalNetProfit += $profit;
+        $totalUnitsSold += $qty;
+
+        $booksReport[] = [
+            'product_id'          => $b['product_id'],
+            'title'               => $b['book_title'],
+            'image'               => $b['main_photo'],
+            'purchase_amount'     => floatval($b['purchase_amount']),
+            'avg_selling_price'   => floatval($b['avg_selling_price']),
+            'unit_profit'         => $unitProfit,
+            'units_sold'          => $qty,
+            'orders_count'        => intval($b['orders_count']),
+            'total_revenue'       => $rev,
+            'total_purchase_cost' => $cost,
+            'net_profit'          => $profit,
+            'profit_margin'       => $margin,
+        ];
+    }
+
+    $overallMargin = $totalRevenue > 0 ? round(($totalNetProfit / $totalRevenue) * 100, 1) : 0.0;
+
+    // 2. Recent Orders Profit Audit
+    $sqlOrders = "
+        SELECT 
+            o.id,
+            o.order_code,
+            o.created_at,
+            o.order_status,
+            o.total,
+            c.name AS customer_name,
+            c.phone AS customer_phone,
+            ROUND(SUM(COALESCE(p.purchase_amount, 0) * oi.qty), 2) AS order_purchase_cost,
+            ROUND(SUM(oi.total - (COALESCE(p.purchase_amount, 0) * oi.qty)), 2) AS order_net_profit,
+            COUNT(oi.id) AS items_count
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        LEFT JOIN products p ON p.id = oi.product_id
+        LEFT JOIN customers c ON c.id = o.customer_id
+        {$where}
+        GROUP BY o.id, o.order_code, o.created_at, o.order_status, o.total, c.name, c.phone
+        ORDER BY o.id DESC
+        LIMIT 20
+    ";
+    $stmtOrders = $pdo->prepare($sqlOrders);
+    $stmtOrders->execute($params);
+    $recentOrderProfits = $stmtOrders->fetchAll();
+
+    echo json_encode([
+        'success' => true,
+        'summary' => [
+            'total_revenue'       => round($totalRevenue, 2),
+            'total_purchase_cost' => round($totalPurchaseCost, 2),
+            'net_profit'          => round($totalNetProfit, 2),
+            'overall_margin'      => $overallMargin,
+            'total_units_sold'    => $totalUnitsSold,
+            'unique_books_sold'   => count($booksReport),
+        ],
+        'books'  => $booksReport,
+        'orders' => $recentOrderProfits,
+    ]);
     exit;
 }
 

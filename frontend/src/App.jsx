@@ -25,11 +25,13 @@ const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
 const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const AdminOrders = lazy(() => import('./pages/admin/AdminOrders'));
+const AdminProfits = lazy(() => import('./pages/admin/AdminProfits'));
 const AdminProducts = lazy(() => import('./pages/admin/AdminProducts'));
 const AdminCategories = lazy(() => import('./pages/admin/AdminCategories'));
 const AdminPublications = lazy(() => import('./pages/admin/AdminPublications'));
 const AdminBanners = lazy(() => import('./pages/admin/AdminBanners'));
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
+const AdminOrderLabelPage = lazy(() => import('./pages/admin/AdminOrderLabelPage'));
 
 // Auth Guard
 import useAuthStore from './store/useAuthStore';
@@ -198,6 +200,9 @@ export default function App() {
           >
             <Route index element={<AdminDashboard />} />
             <Route path="orders" element={<AdminOrders />} />
+            <Route path="orders/print-label/:id" element={<AdminOrderLabelPage />} />
+            <Route path="orders/print-label" element={<AdminOrderLabelPage />} />
+            <Route path="profits" element={<AdminProfits />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="categories" element={<AdminCategories />} />
             <Route path="publications" element={<AdminPublications />} />

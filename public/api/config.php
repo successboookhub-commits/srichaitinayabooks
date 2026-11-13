@@ -9,21 +9,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     exit;
 }
 
-// Load Environment Variables from potential locations
+// Load Environment Variables from root .env or fallbacks
 function loadEnvVariables() {
     static $env = null;
     if ($env !== null) return $env;
 
     $env = [];
+    // Prioritize root .env (the main directory in Hostinger File Manager)
     $envPaths = [
-        dirname(__DIR__, 2) . '/backend/.env',
-        dirname(__DIR__, 2) . '/backend/.env.example',
-        dirname(__DIR__, 1) . '/.env',
-        dirname(__DIR__, 1) . '/.env.example',
-        dirname(__DIR__, 2) . '/.env',
+        dirname(__DIR__, 2) . '/.env',             // Root .env (Hostinger File Manager root)
+        dirname(__DIR__, 1) . '/.env',             // public/.env
+        __DIR__ . '/.env',                         // public/api/.env
+        dirname(__DIR__, 2) . '/backend/.env',     // backend/.env
         dirname(__DIR__, 2) . '/.env.example',
-        __DIR__ . '/.env',
-        __DIR__ . '/.env.example',
+        dirname(__DIR__, 2) . '/backend/.env.example',
     ];
 
     foreach ($envPaths as $envPath) {
@@ -46,39 +45,61 @@ function loadEnvVariables() {
     return $env;
 }
 
-// Razorpay Configuration Helper (Active: TEST MODE per user request)
-// Live Mode Credentials (saved for quick toggle when user requests):
-// $liveKey = 'rzp_live_SIJDGxy85sgrKV';
-// $liveSecret = 'gj9CI3Dq9wKU5dapQR61Vyo3';
+// Universal ENV getter with fallback
+function getEnvVal($key, $default = null) {
+    $env = loadEnvVariables();
+    if (isset($env[$key]) && $env[$key] !== '') {
+        return $env[$key];
+    }
+    $srv = getenv($key);
+    if ($srv !== false && $srv !== '') {
+        return $srv;
+    }
+    return $default;
+}
 
+// Razorpay Configuration Helper (Reads from .env with auto-detection)
 function getRazorpayConfig() {
-    // ACTIVE: Test Mode credentials directly in code
-    $testKey = 'rzp_test_SwedUUn1KgRMs0';
-    $testSecret = 'xdW2Ry7T67sUK4zMKb3oOsZh';
+    $directKey = getEnvVal('RAZORPAY_KEY');
+    $directSecret = getEnvVal('RAZORPAY_SECRET');
+    if (!empty($directKey) && !empty($directSecret)) {
+        $isLive = str_starts_with($directKey, 'rzp_live_');
+        return [
+            'key'    => $directKey,
+            'secret' => $directSecret,
+            'mode'   => $isLive ? 'live' : 'test',
+        ];
+    }
+
+    $mode = strtolower(getEnvVal('RAZORPAY_MODE', 'test'));
+
+    if ($mode === 'live') {
+        $key = getEnvVal('RAZORPAY_LIVE_KEY', 'rzp_live_SIJDGxy85sgrKV');
+        $secret = getEnvVal('RAZORPAY_LIVE_SECRET', 'gj9CI3Dq9wKU5dapQR61Vyo3');
+    } else {
+        $key = getEnvVal('RAZORPAY_TEST_KEY', 'rzp_test_SwedUUn1KgRMs0');
+        $secret = getEnvVal('RAZORPAY_TEST_SECRET', 'xdW2Ry7T67sUK4zMKb3oOsZh');
+    }
 
     return [
-        'key'    => $testKey,
-        'secret' => $testSecret,
-        'mode'   => 'test',
+        'key'    => $key,
+        'secret' => $secret,
+        'mode'   => $mode,
     ];
 }
 
-// Helper to load DB config
+// Helper to load DB config (Reads from .env)
 function getDbConfig() {
     $isLocal = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1', 'localhost:5000', 'localhost:5173']);
-    $env = loadEnvVariables();
 
-    // Default Hostinger settings
-    $config = [
-        'host' => $isLocal ? '127.0.0.1' : ($env['DB_HOST'] ?? 'localhost'),
-        'port' => $env['DB_PORT'] ?? '3306',
-        'user' => $isLocal ? 'root' : ($env['DB_USER'] ?? 'u803044110_sri_user'),
-        'pass' => $env['DB_PASSWORD'] ?? '',
-        'name' => $isLocal ? 'u302322072_bookcom123' : ($env['DB_NAME'] ?? 'u803044110_srichaitanya'),
-        'jwt_secret' => $env['JWT_SECRET'] ?? 'srichaitanya_super_secure_jwt_secret_key_2026_xyz'
+    return [
+        'host'       => getEnvVal('DB_HOST', $isLocal ? '127.0.0.1' : 'localhost'),
+        'port'       => getEnvVal('DB_PORT', '3306'),
+        'user'       => getEnvVal('DB_USER', $isLocal ? 'root' : 'u803044110_sri_user'),
+        'pass'       => getEnvVal('DB_PASSWORD', $isLocal ? '' : 'SriChaitanya@2026'),
+        'name'       => getEnvVal('DB_NAME', $isLocal ? 'u302322072_bookcom123' : 'u803044110_srichaitanya'),
+        'jwt_secret' => getEnvVal('JWT_SECRET', 'srichaitanya_super_secure_jwt_secret_key_2026_xyz'),
     ];
-
-    return $config;
 }
 
 function getDb() {
@@ -110,7 +131,7 @@ function getDb() {
                 'pass_set'    => !empty($cfg['pass']),
                 'pass_length' => strlen($cfg['pass']),
             ],
-            'hint' => 'Please set DB_PASSWORD in backend/.env or backend/.env.example on Hostinger'
+            'hint' => 'Please verify DB_PASSWORD in your .env file on Hostinger'
         ]);
         exit;
     }

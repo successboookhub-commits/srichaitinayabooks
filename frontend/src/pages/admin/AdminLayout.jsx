@@ -20,7 +20,8 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  Sparkles
+  Sparkles,
+  TrendingUp
 } from 'lucide-react';
 import useAuthStore from '../../store/useAuthStore';
 
@@ -96,9 +97,10 @@ export default function AdminLayout() {
   const navItems = [
     { label: 'Dashboard', path: '/admin', icon: LayoutDashboard, end: true },
     { label: 'Orders', path: '/admin/orders', icon: ShoppingBag },
+    { label: 'Profits', path: '/admin/profits', icon: TrendingUp },
+    { label: 'Products', path: '/admin/products', icon: BookOpen },
     { label: 'Categories', path: '/admin/categories', icon: FolderTree },
     { label: 'Publications', path: '/admin/publications', icon: Library },
-    { label: 'Products', path: '/admin/products', icon: BookOpen },
     { label: 'Home & Banners', path: '/admin/banners', icon: Sparkles },
     { label: 'Admins & Staff', path: '/admin/admins', icon: ShieldCheck },
   ];

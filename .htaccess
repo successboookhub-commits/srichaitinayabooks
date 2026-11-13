@@ -14,9 +14,11 @@ DirectoryIndex index.html index.php
     # 1. API Route - Direct execution to PHP API
     RewriteCond %{DOCUMENT_ROOT}/api/index.php -f
     RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+    RewriteRule ^invoices/(.*)$ api/index.php [QSA,L]
 
     RewriteCond %{DOCUMENT_ROOT}/dist/api/index.php -f
     RewriteRule ^api/(.*)$ dist/api/index.php [QSA,L]
+    RewriteRule ^invoices/(.*)$ dist/api/index.php [QSA,L]
 
     RewriteCond %{DOCUMENT_ROOT}/public/api/index.php -f
     RewriteRule ^api/(.*)$ public/api/index.php [QSA,L]

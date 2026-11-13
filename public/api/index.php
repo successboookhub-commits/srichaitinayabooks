@@ -1208,26 +1208,153 @@ if ($path === 'auth/profile' && $method === 'PUT') {
 // =============================================================
 // INVOICE & WHATSAPP NOTIFICATION ENGINE (BhashSMS)
 // =============================================================
-function generateOrderInvoicePdf($pdo, $orderId, $savePath) {
-    try {
-        $autoload = dirname(__DIR__, 2) . '/vendor/autoload.php';
-        if (file_exists($autoload)) {
-            require_once $autoload;
-        }
+function createNativeInvoicePdf($order, $items, $savePath) {
+    $orderCode = $order['order_code'] ?? 'ORD-000';
+    $orderDate = !empty($order['created_at']) ? date('d-M-Y', strtotime($order['created_at'])) : date('d-M-Y');
+    $custName = !empty($order['customer_name']) ? $order['customer_name'] : 'Customer';
+    $custPhone = !empty($order['customer_phone']) ? $order['customer_phone'] : '';
+    $status = !empty($order['status']) ? $order['status'] : 'Paid';
+    $totalAmount = number_format(floatval($order['total'] ?? 0), 2);
+    $shipping = number_format(floatval($order['shipping'] ?? 0), 2);
+    $addr = trim(implode(', ', array_filter([$order['door_no'] ?? '', $order['address'] ?? '', $order['mandal'] ?? '', $order['district'] ?? '', $order['state'] ?? '', $order['pincode'] ?? ''])));
+    if (strlen($addr) > 55) {
+        $addr = substr($addr, 0, 52) . '...';
+    }
 
-        $ordStmt = $pdo->prepare('
-            SELECT o.*, c.name as customer_name, c.phone as customer_phone, c.door_no, c.address, c.mandal, c.district, c.state, c.pincode
-            FROM orders o
-            LEFT JOIN customers c ON c.id = o.customer_id
-            WHERE o.id = ? LIMIT 1
-        ');
-        $ordStmt->execute([$orderId]);
+    $esc = function($s) {
+        $s = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', (string)$s);
+        $s = str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $s);
+        return preg_replace('/[^\x20-\x7E]/', '', $s);
+    };
+
+    $sOrderCode = $esc($orderCode);
+    $sOrderDate = $esc($orderDate);
+    $sCustName = $esc($custName);
+    $sCustPhone = $esc($custPhone);
+    $sAddr = $esc($addr);
+    $sStatus = $esc($status);
+    $sTotal = $esc($totalAmount);
+    $sShipping = $esc($shipping);
+
+    $stream = "q\n";
+    // Header red background
+    $stream .= "0.84 0.17 0.21 rg\n";
+    $stream .= "40 760 515 45 re f\n";
+    // Header text in white
+    $stream .= "1 1 1 rg\n";
+    $stream .= "BT /F2 16 Tf 50 788 Td (SRI CHAITANYA BOOK CENTRE - TAX INVOICE) Tj ET\n";
+    $stream .= "BT /F1 9 Tf 50 770 Td (Konark Theatre Lane, Dilsukhnagar, Hyderabad | Helpline: +91 9177110134) Tj ET\n";
+
+    // Order & Customer Info
+    $stream .= "0 0 0 rg\n";
+    $stream .= "BT /F2 10 Tf 50 735 Td (Order Number: ) Tj /F1 10 Tf ({$sOrderCode}) Tj ET\n";
+    $stream .= "BT /F2 10 Tf 50 720 Td (Order Date: ) Tj /F1 10 Tf ({$sOrderDate}) Tj ET\n";
+    $stream .= "BT /F2 10 Tf 50 705 Td (Payment Status: ) Tj /F1 10 Tf ({$sStatus}) Tj ET\n";
+
+    $stream .= "BT /F2 10 Tf 300 735 Td (Billed & Shipped To:) Tj ET\n";
+    $stream .= "BT /F1 9.5 Tf 300 720 Td ({$sCustName} | Phone: {$sCustPhone}) Tj ET\n";
+    $stream .= "BT /F1 8.5 Tf 300 705 Td ({$sAddr}) Tj ET\n";
+
+    // Table Header
+    $stream .= "0.92 0.93 0.95 rg\n";
+    $stream .= "40 670 515 20 re f\n";
+    $stream .= "0 0 0 rg\n";
+    $stream .= "BT /F2 9 Tf 50 676 Td (#) Tj 75 676 Td (Book Title / Description) Tj 380 676 Td (Qty) Tj 430 676 Td (Price) Tj 490 676 Td (Total) Tj ET\n";
+
+    // Table Items
+    $y = 650;
+    foreach ($items as $idx => $it) {
+        $num = $idx + 1;
+        $title = $esc(substr($it['product_name'] ?? 'Book', 0, 48));
+        $qty = intval($it['qty'] ?? 1);
+        $price = number_format(floatval($it['price'] ?? 0), 2);
+        $total = number_format(floatval($it['total'] ?? ($price * $qty)), 2);
+
+        $stream .= "BT /F1 8.5 Tf 50 {$y} Td ({$num}) Tj 75 {$y} Td ({$title}) Tj 385 {$y} Td ({$qty}) Tj 430 {$y} Td (Rs.{$price}) Tj 490 {$y} Td (Rs.{$total}) Tj ET\n";
+        $y -= 18;
+        if ($y < 120) break;
+    }
+
+    // Divider Line
+    $stream .= "0.8 0.8 0.8 RG 1 w\n";
+    $stream .= "40 " . ($y - 5) . " m 555 " . ($y - 5) . " l S\n";
+
+    // Totals Box
+    $yTot = $y - 25;
+    $stream .= "0 0 0 rg\n";
+    $stream .= "BT /F1 9.5 Tf 380 {$yTot} Td (Shipping Charge:) Tj 490 {$yTot} Td (Rs.{$sShipping}) Tj ET\n";
+    $yTot -= 18;
+    $stream .= "0.84 0.17 0.21 rg\n";
+    $stream .= "BT /F2 12 Tf 380 {$yTot} Td (Grand Total Paid:) Tj 490 {$yTot} Td (Rs.{$sTotal}) Tj ET\n";
+
+    // Footer
+    $stream .= "0.4 0.4 0.4 rg\n";
+    $stream .= "BT /F1 8.5 Tf 50 50 Td (Computer-generated tax invoice for competitive exam study materials.) Tj ET\n";
+    $stream .= "BT /F1 8.5 Tf 50 38 Td (Track your order online at: https://srichaitanybookscenter.com/track-order) Tj ET\n";
+    $stream .= "Q\n";
+
+    $streamLen = strlen($stream);
+
+    $objects = [];
+    $objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+    $objects[2] = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
+    $objects[3] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>";
+    $objects[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+    $objects[5] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>";
+    $objects[6] = "<< /Length {$streamLen} >>\nstream\n{$stream}\nendstream";
+
+    $pdf = "%PDF-1.4\n";
+    $offsets = [];
+    for ($i = 1; $i <= 6; $i++) {
+        $offsets[$i] = strlen($pdf);
+        $pdf .= "{$i} 0 obj\n" . $objects[$i] . "\nendobj\n";
+    }
+
+    $startxref = strlen($pdf);
+    $pdf .= "xref\n0 7\n";
+    $pdf .= "0000000000 65535 f \n";
+    for ($i = 1; $i <= 6; $i++) {
+        $pdf .= sprintf("%010d 00000 n \n", $offsets[$i]);
+    }
+    $pdf .= "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n{$startxref}\n%%EOF\n";
+
+    $dir = dirname($savePath);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    return (file_put_contents($savePath, $pdf) !== false);
+}
+
+function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
+    try {
+        if (is_numeric($orderIdOrCode)) {
+            $ordStmt = $pdo->prepare('
+                SELECT o.*, c.name as customer_name, c.phone as customer_phone, c.door_no, c.address, c.mandal, c.district, c.state, c.pincode
+                FROM orders o
+                LEFT JOIN customers c ON c.id = o.customer_id
+                WHERE o.id = ? LIMIT 1
+            ');
+            $ordStmt->execute([$orderIdOrCode]);
+        } else {
+            $ordStmt = $pdo->prepare('
+                SELECT o.*, c.name as customer_name, c.phone as customer_phone, c.door_no, c.address, c.mandal, c.district, c.state, c.pincode
+                FROM orders o
+                LEFT JOIN customers c ON c.id = o.customer_id
+                WHERE o.order_code = ? LIMIT 1
+            ');
+            $ordStmt->execute([$orderIdOrCode]);
+        }
         $order = $ordStmt->fetch();
         if (!$order) return false;
 
         $itemsStmt = $pdo->prepare('SELECT * FROM order_items WHERE order_id = ?');
-        $itemsStmt->execute([$orderId]);
+        $itemsStmt->execute([$order['id']]);
         $items = $itemsStmt->fetchAll();
+
+        $autoload = dirname(__DIR__, 2) . '/vendor/autoload.php';
+        if (file_exists($autoload)) {
+            @require_once $autoload;
+        }
 
         if (class_exists('Dompdf\Dompdf')) {
             $options = new \Dompdf\Options();
@@ -1280,7 +1407,7 @@ function generateOrderInvoicePdf($pdo, $orderId, $savePath) {
               <div class='header'>
                 <div class='logo'>SRI CHAITANYA BOOK CENTRE</div>
                 <div class='subtitle'>Opp. ICICI ATM, Konark Theatre Lane, Dilsukhnagar, Hyderabad, Telangana - 500060</div>
-                <div class='subtitle'>Helpline / WhatsApp: +91 9177110134 | Website: srichaitanya.successbookhub.com</div>
+                <div class='subtitle'>Helpline / WhatsApp: +91 9177110134 | Website: srichaitanybookscenter.com</div>
                 <div class='badge'>OFFICIAL GST TAX INVOICE / ORDER RECEIPT</div>
               </div>
 
@@ -1329,7 +1456,7 @@ function generateOrderInvoicePdf($pdo, $orderId, $savePath) {
 
               <div class='footer'>
                 This is a computer-generated tax invoice for competitive exam study materials.<br>
-                For order tracking, visit <strong>https://srichaitanya.successbookhub.com/tracking</strong>
+                For order tracking, visit <strong>https://srichaitanybookscenter.com/track-order</strong>
               </div>
             </body>
             </html>
@@ -1341,17 +1468,13 @@ function generateOrderInvoicePdf($pdo, $orderId, $savePath) {
             file_put_contents($savePath, $dompdf->output());
             return true;
         }
+
+        // Native PDF fallback - 100% reliable without external libraries
+        return createNativeInvoicePdf($order, $items, $savePath);
     } catch (\Throwable $e) {
         error_log('Invoice PDF generation failed: ' . $e->getMessage());
+        return false;
     }
-
-    // Fallback: copy an existing sample invoice if Dompdf fails
-    $existing = glob(dirname(__DIR__) . '/invoices/ORD*.pdf');
-    if (!empty($existing[0])) {
-        @copy($existing[0], $savePath);
-        return true;
-    }
-    return false;
 }
 
 function sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $total, $status = 'Paid') {
@@ -1373,15 +1496,20 @@ function sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $tota
             generateOrderInvoicePdf($pdo, $orderId, $invoiceFile);
         }
 
-        $domain = getEnvVal('APP_URL', 'https://srichaitanya.successbookhub.com');
-        $invoiceUrl = $domain . '/invoices/' . $orderCode . '.pdf';
+        $domain = rtrim(getEnvVal('APP_URL', 'https://srichaitanybookscenter.com'), '/');
+        $invoiceUrl = $domain . '/api/invoices/' . $orderCode . '.pdf';
+
+        $user = getEnvVal('BHASHSMS_USER', 'Azsofttech_BW');
+        $pass = getEnvVal('BHASHSMS_PASS', '12345678');
+        $sender = getEnvVal('BHASHSMS_SENDER', 'BUZWAP');
+        $text = getEnvVal('BHASHSMS_TEMPLATE', 'ord_ch01');
 
         $query = [
-            'user'     => getEnvVal('BHASHSMS_USER', 'Azsofttech_BW'),
-            'pass'     => getEnvVal('BHASHSMS_PASS', '12345678'),
-            'sender'   => getEnvVal('BHASHSMS_SENDER', 'BUZWAP'),
+            'user'     => $user,
+            'pass'     => $pass,
+            'sender'   => $sender,
             'phone'    => $formattedPhone,
-            'text'     => getEnvVal('BHASHSMS_TEMPLATE', 'ord_ch01'),
+            'text'     => $text,
             'priority' => 'wa',
             'stype'    => 'normal',
             'Params'   => $params,
@@ -1395,7 +1523,7 @@ function sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $tota
         if (function_exists('curl_init')) {
             $ch = curl_init($apiUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
             $res = curl_exec($ch);
@@ -1409,9 +1537,9 @@ function sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $tota
 }
 
 // -------------------------------------------------------------
-// SERVE ORDER TAX INVOICE PDF (Admin View / Customer Download)
+// SERVE ORDER TAX INVOICE PDF (Admin View / Customer Download / WhatsApp)
 // -------------------------------------------------------------
-if (preg_match('#^(order-history/invoice|invoices)/([a-zA-Z0-9_-]+)$#', $path, $m)) {
+if (preg_match('#^(order-history/invoice|invoices)/([a-zA-Z0-9_-]+)(\.pdf)?$#i', $path, $m)) {
     $orderCode = strtoupper($m[2]);
     $invoiceDir = dirname(__DIR__) . '/invoices';
     if (!is_dir($invoiceDir)) {

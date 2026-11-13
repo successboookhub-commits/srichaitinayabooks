@@ -71,7 +71,7 @@ function getRazorpayConfig() {
         ];
     }
 
-    $mode = strtolower(getEnvVal('RAZORPAY_MODE', 'test'));
+    $mode = strtolower(getEnvVal('RAZORPAY_MODE', 'live'));
 
     if ($mode === 'live') {
         $key = getEnvVal('RAZORPAY_LIVE_KEY', 'rzp_live_SIJDGxy85sgrKV');

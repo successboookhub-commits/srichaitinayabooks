@@ -1,7 +1,12 @@
 import axios from 'axios';
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-export const SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' && window.location.origin ? `${window.location.origin}/api` : '/api');
+
+export const SERVER_URL =
+  import.meta.env.VITE_SERVER_URL ||
+  (typeof window !== 'undefined' && window.location.origin ? window.location.origin : '');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -142,6 +147,9 @@ export const getImageUrl = (imagePath) => {
     return imagePath;
   }
   const cleanPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
+  if (cleanPath.startsWith('images/')) {
+    return `/${cleanPath}`;
+  }
   // Check if it's from legacy Laravel storage or new uploads
   if (cleanPath.startsWith('products/') || cleanPath.startsWith('banners/') || cleanPath.startsWith('uploads/')) {
     return SERVER_URL ? `${SERVER_URL}/storage/${cleanPath}` : `/storage/${cleanPath}`;

@@ -1,4 +1,4 @@
-import api from './api.js';
+import api, { API_BASE_URL } from './api.js';
 
 export function playOrderChime() {
   try {
@@ -55,7 +55,7 @@ class RealtimeService {
   connectStream() {
     try {
       if (typeof EventSource !== 'undefined') {
-        const streamUrl = '/api/realtime/stream';
+        const streamUrl = `${API_BASE_URL}/realtime/stream`;
         this.eventSource = new EventSource(streamUrl);
 
         this.eventSource.onopen = () => {

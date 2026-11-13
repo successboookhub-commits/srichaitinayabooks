@@ -150,7 +150,7 @@ export default function Checkout() {
         currency: 'INR',
         name: 'Sri Chaitanya Book Centre',
         description: `Order Payment for ${cart.length} item(s)`,
-        image: 'https://srichaitanya.successbookhub.com/favicon.svg',
+        image: window.location.origin + '/favicon.svg',
         order_id,
         prefill: {
           name: formData.name,

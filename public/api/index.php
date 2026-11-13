@@ -150,7 +150,22 @@ if ($path === 'realtime/sync') {
     $since = intval($_GET['since'] ?? 0);
     $lastId = intval($_GET['last_id'] ?? 0);
 
-    $lastOrder = $pdo->query('SELECT id, order_code, customer_name, total, status, order_status, UNIX_TIMESTAMP(updated_at) as updated_time, UNIX_TIMESTAMP(created_at) as created_time FROM orders ORDER BY id DESC LIMIT 1')->fetch();
+    try {
+        $lastOrder = $pdo->query('
+            SELECT o.id, o.order_code, c.name as customer_name, o.total, o.status, o.order_status, 
+                   UNIX_TIMESTAMP(o.updated_at) as updated_time, UNIX_TIMESTAMP(o.created_at) as created_time 
+            FROM orders o 
+            LEFT JOIN customers c ON c.id = o.customer_id 
+            ORDER BY o.id DESC LIMIT 1
+        ')->fetch();
+    } catch (\Throwable $e) {
+        $lastOrder = $pdo->query('
+            SELECT id, order_code, total, status, order_status, 
+                   UNIX_TIMESTAMP(updated_at) as updated_time, UNIX_TIMESTAMP(created_at) as created_time 
+            FROM orders 
+            ORDER BY id DESC LIMIT 1
+        ')->fetch();
+    }
     
     $hasNewOrder = false;
     if ($lastOrder) {

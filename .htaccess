@@ -4,5 +4,22 @@ DirectoryIndex index.html index.php
     RewriteEngine On
     RewriteBase /
 
+    # 1. API Route - Direct execution to PHP API
+    RewriteRule ^api/(.*)$ public/api/index.php [QSA,L]
+    RewriteRule ^api/?$ public/api/index.php [QSA,L]
+
+    # 2. Static uploads, storage, and assets
+    RewriteRule ^storage/(.*)$ public/storage/$1 [L]
+    RewriteRule ^uploads/(.*)$ public/uploads/$1 [L]
+    RewriteRule ^invoices/(.*)$ public/invoices/$1 [L]
+    RewriteRule ^images/(.*)$ public/images/$1 [L]
+    RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+
+    # 3. Direct file or directory in public/
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -f [OR]
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -d
     RewriteRule ^(.*)$ public/$1 [L]
+
+    # 4. React Single Page Application (SPA) routing
+    RewriteRule ^ public/index.html [L]
 </IfModule>

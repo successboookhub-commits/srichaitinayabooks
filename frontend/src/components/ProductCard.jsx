@@ -49,9 +49,16 @@ export default function ProductCard({ product }) {
           src={getImageUrl(image)}
           alt={name}
           loading="lazy"
+          decoding="async"
           className="w-full h-full object-contain group-hover:scale-103 transition-transform duration-300 filter drop-shadow-xs"
           onError={(e) => {
-            e.target.src = '/images/ebook_logo.png';
+            const currentSrc = e.currentTarget.getAttribute('src') || '';
+            if (currentSrc.startsWith('/storage/') && !e.currentTarget.dataset.retried) {
+              e.currentTarget.dataset.retried = '1';
+              e.currentTarget.src = currentSrc.replace('/storage/', '/public/storage/');
+              return;
+            }
+            e.currentTarget.src = '/images/ebook_logo.png';
           }}
         />
 

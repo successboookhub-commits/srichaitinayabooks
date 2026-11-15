@@ -140,19 +140,44 @@ api.interceptors.response.use(
 );
 
 export const getImageUrl = (imagePath) => {
-  if (!imagePath) return '/placeholder-book.png';
+  if (!imagePath || typeof imagePath !== 'string') return '/images/ebook_logo.png';
+
+  // 1. If absolute URL, ensure https:// and encode spaces/special characters safely
   if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-    return imagePath;
+    const secureUrl = imagePath.replace(/^http:\/\//i, 'https://');
+    try {
+      const urlObj = new URL(secureUrl);
+      urlObj.pathname = urlObj.pathname
+        .split('/')
+        .map((seg) => encodeURIComponent(decodeURIComponent(seg)))
+        .join('/');
+      return urlObj.toString();
+    } catch {
+      return encodeURI(secureUrl);
+    }
   }
-  const cleanPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
+
+  let cleanPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
+
+  // 2. Normalize and strip redundant prefix if present
+  if (cleanPath.startsWith('storage/')) {
+    cleanPath = cleanPath.slice(8);
+  }
+
+  let fullPath = '';
   if (cleanPath.startsWith('images/')) {
-    return `/${cleanPath}`;
+    fullPath = `/${cleanPath}`;
+  } else if (cleanPath.startsWith('products/') || cleanPath.startsWith('banners/') || cleanPath.startsWith('uploads/')) {
+    fullPath = SERVER_URL ? `${SERVER_URL}/storage/${cleanPath}` : `/storage/${cleanPath}`;
+  } else {
+    fullPath = SERVER_URL ? `${SERVER_URL}/storage/products/${cleanPath}` : `/storage/products/${cleanPath}`;
   }
-  // Check if it's from legacy Laravel storage or new uploads
-  if (cleanPath.startsWith('products/') || cleanPath.startsWith('banners/') || cleanPath.startsWith('uploads/')) {
-    return SERVER_URL ? `${SERVER_URL}/storage/${cleanPath}` : `/storage/${cleanPath}`;
-  }
-  return SERVER_URL ? `${SERVER_URL}/${cleanPath}` : `/${cleanPath}`;
+
+  // 3. Encode every segment safely to ensure filenames with spaces, parentheses, etc. load on all mobile browsers
+  return fullPath
+    .split('/')
+    .map((seg) => encodeURIComponent(decodeURIComponent(seg)))
+    .join('/');
 };
 
 export const getInvoiceUrl = (orderCode) => {

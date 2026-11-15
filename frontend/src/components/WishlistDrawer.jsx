@@ -116,9 +116,16 @@ export default function WishlistDrawer() {
                       <img
                         src={getImageUrl(item.image || item.main_photo)}
                         alt={item.name}
+                        decoding="async"
                         className="w-full h-full object-contain"
                         onError={(e) => {
-                          e.target.src = '/images/ebook_logo.png';
+                          const currentSrc = e.currentTarget.getAttribute('src') || '';
+                          if (currentSrc.startsWith('/storage/') && !e.currentTarget.dataset.retried) {
+                            e.currentTarget.dataset.retried = '1';
+                            e.currentTarget.src = currentSrc.replace('/storage/', '/public/storage/');
+                            return;
+                          }
+                          e.currentTarget.src = '/images/ebook_logo.png';
                         }}
                       />
                     </div>

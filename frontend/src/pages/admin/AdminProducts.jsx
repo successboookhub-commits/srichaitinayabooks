@@ -397,43 +397,73 @@ export default function AdminProducts() {
     }
   };
 
-  // Quick 1-click toggle for Featured status on Homepage
+  // Quick 1-click toggle for Featured status on Homepage (Direct Atomic Sync)
   const toggleFeatured = async (product) => {
     const isCurrentlyFeatured = Number(product.is_featured) === 1;
     const newFeatured = isCurrentlyFeatured ? 0 : 1;
+    
+    // 1. Optimistic UI update so the checkbox ticks/unticks instantly (0ms latency)
     setTogglingId(product.id);
+    setProducts((prev) =>
+      prev.map((item) => (item.id === product.id ? { ...item, is_featured: newFeatured } : item))
+    );
+
     try {
+      // 2. Build the EXACT same FormData payload that the Edit Modal Save sends
       const formData = new FormData();
-      formData.append('is_featured', String(newFeatured));
-      await api.post(`/products/${product.id}/toggle-featured`, formData);
-      setProducts((prev) =>
-        prev.map((item) => (item.id === product.id ? { ...item, is_featured: newFeatured } : item))
-      );
+      formData.append('name', (product.name || product.title || '').trim());
+      formData.append('title', (product.name || product.title || '').trim());
+      formData.append('publication_id', product.publication_id || '');
+      formData.append('category_ids', JSON.stringify(product.category_ids || []));
+      if (product.category_ids && product.category_ids[0]) {
+        formData.append('category_id', product.category_ids[0]);
+      }
+      formData.append('old_price', product.old_price || product.total_price || product.price || '0');
+      formData.append('discount', product.discount || '0');
+      formData.append('total_price', product.total_price || product.price || '0');
+      formData.append('price', product.total_price || product.price || '0');
+      formData.append('purchase_amount', product.purchase_amount || product.purchase_price || '0');
+      formData.append('purchase_price', product.purchase_amount || product.purchase_price || '0');
+      formData.append('quantity', product.quantity !== undefined ? product.quantity : (product.stock || 1));
+      formData.append('stock', product.quantity !== undefined ? product.quantity : (product.stock || 1));
+      formData.append('weight_type', product.is_weightless ? 'weightless' : 'normal');
+      formData.append('is_weightless', product.is_weightless ? '1' : '0');
+      formData.append('weight', product.weight || '0.50');
+      formData.append('shipping_charge', product.shipping_charge !== undefined ? product.shipping_charge : '35');
+      formData.append('description', product.description || '');
+      formData.append('is_featured', newFeatured ? '1' : '0');
+      formData.append('is_active', product.is_active !== undefined ? (product.is_active ? '1' : '0') : '1');
+
+      // 3. Post to the standard product update endpoint (100% proven reliable)
+      await api.post(`/products/${product.id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      // 4. Also notify toggle-featured endpoint in parallel for complete sync
+      try {
+        await api.post(`/products/${product.id}/toggle-featured`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } catch (e) {}
+
+      // 5. Invalidate frontend cache so customer storefront updates live immediately
       api.clearCache();
+      
       setFeedback({
         type: 'success',
         text: `"${product.name || product.title}" is ${newFeatured ? 'now Featured on Homepage' : 'removed from Featured'}.`,
       });
       setTimeout(() => setFeedback({ type: '', text: '' }), 3500);
+
+      // 6. Refresh catalog from server to ensure database sync
+      fetchProducts(pagination.page);
     } catch (err) {
-      console.error('Failed to toggle featured via custom endpoint, trying standard update:', err);
-      try {
-        const formData = new FormData();
-        formData.append('is_featured', String(newFeatured));
-        await api.post(`/products/${product.id}`, formData);
-        setProducts((prev) =>
-          prev.map((item) => (item.id === product.id ? { ...item, is_featured: newFeatured } : item))
-        );
-        api.clearCache();
-        setFeedback({
-          type: 'success',
-          text: `"${product.name || product.title}" is ${newFeatured ? 'now Featured on Homepage' : 'removed from Featured'}.`,
-        });
-        setTimeout(() => setFeedback({ type: '', text: '' }), 3500);
-      } catch (err2) {
-        console.error('Failed fallback update:', err2);
-        alert('Failed to update featured status.');
-      }
+      console.error('Failed to toggle featured:', err);
+      // Revert optimistic update on failure
+      setProducts((prev) =>
+        prev.map((item) => (item.id === product.id ? { ...item, is_featured: isCurrentlyFeatured ? 1 : 0 } : item))
+      );
+      alert('Failed to update featured status: ' + (err.response?.data?.message || err.message));
     } finally {
       setTogglingId(null);
     }
@@ -836,16 +866,20 @@ export default function AdminProducts() {
                             checked={Number(p.is_featured) === 1}
                             disabled={togglingId === p.id}
                             onChange={() => toggleFeatured(p)}
-                            className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 border-slate-300 cursor-pointer transition-all disabled:opacity-50"
+                            className="w-4.5 h-4.5 rounded text-amber-500 focus:ring-amber-400 border-slate-300 cursor-pointer transition-all disabled:opacity-50"
                           />
                           <span
-                            className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-all ${
+                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full transition-all ${
                               Number(p.is_featured) === 1
                                 ? 'bg-amber-100/90 text-amber-800 border border-amber-300 shadow-2xs group-hover:bg-amber-200'
                                 : 'bg-slate-100 text-slate-500 border border-slate-200 group-hover:bg-slate-200 group-hover:text-slate-700'
                             }`}
                           >
-                            <Sparkles className={`w-3 h-3 ${Number(p.is_featured) === 1 ? 'text-amber-600 fill-amber-500' : 'text-slate-400'}`} />
+                            {togglingId === p.id ? (
+                              <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                            ) : (
+                              <Sparkles className={`w-3 h-3 shrink-0 ${Number(p.is_featured) === 1 ? 'text-amber-600 fill-amber-500' : 'text-slate-400'}`} />
+                            )}
                             <span>{Number(p.is_featured) === 1 ? 'Featured' : 'Add to Feature'}</span>
                           </span>
                         </label>

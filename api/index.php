@@ -995,7 +995,7 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
 }
 
 // 1-Click Feature Toggle Endpoint (Atomic & Real-Time Sync)
-if (preg_match('#^products/(\d+)/toggle-featured$#', $path, $m) && ($method === 'POST' || $method === 'PUT')) {
+if (preg_match('#^products/(?:admin/)?(\d+)/toggle-featured$#', $path, $m) && ($method === 'POST' || $method === 'PUT')) {
     $id = intval($m[1]);
     $newVal = isset($_POST['is_featured']) ? intval($_POST['is_featured']) : (isset($body['is_featured']) ? intval($body['is_featured']) : null);
     

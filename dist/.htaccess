@@ -57,6 +57,16 @@ DirectoryIndex index.html index.php
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
+    # Fallback for storage images: check both /storage and /public/storage
+    RewriteCond %{REQUEST_URI} ^/storage/(.*)$
+    RewriteCond %{DOCUMENT_ROOT}/storage/%1 !-f
+    RewriteCond %{DOCUMENT_ROOT}/public/storage/%1 -f
+    RewriteRule ^storage/(.*)$ /public/storage/$1 [L]
+
+    # Never rewrite image or media asset requests to index.html (prevents browsers from caching 200 HTML as image)
+    RewriteCond %{REQUEST_URI} \.(jpe?g|png|webp|gif|svg|ico)$ [NC]
+    RewriteRule .* - [R=404,L]
+
     # React Single Page Application (SPA) routing: send all other requests to index.html
     RewriteRule ^ index.html [L]
 </IfModule>

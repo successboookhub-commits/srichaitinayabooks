@@ -1504,77 +1504,77 @@ function createNativeInvoicePdf($order, $items, $savePath) {
 
     // 1. Header Box
     $stream .= "0 0 0 rg\n";
-    $stream .= "BT /F2 13 Tf 58 765 Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
-    $stream .= "BT /F2 7.5 Tf 58 752 Td (ESTD. 1986 | DILSUKHNAGAR, HYDERABAD - COMPETITIVE EXAM BOOKS) Tj ET\n";
+    $stream .= "BT /F2 18 Tf 58 763 Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
+    $stream .= "BT /F2 9.5 Tf 58 748 Td (ESTD. 1986 | DILSUKHNAGAR, HYDERABAD - COMPETITIVE EXAM BOOKS) Tj ET\n";
     // Prepaid badge on right
-    $stream .= "1 w 465 748 72 20 re S\n";
-    $stream .= "BT /F2 9.5 Tf 476 755 Td ({$sBadge}) Tj ET\n";
+    $stream .= "1.5 w 455 744 85 24 re S\n";
+    $stream .= "BT /F2 12 Tf 467 752 Td ({$sBadge}) Tj ET\n";
     // Header divider
-    $stream .= "1.5 w 48 738 m 547 738 l S\n";
+    $stream .= "2 w 48 734 m 547 734 l S\n";
 
     // 2. Order ID Strip
-    $stream .= "BT /F2 8.5 Tf 58 722 Td (ORDER NO: ) Tj /F2 12 Tf ({$sOrderCode}) Tj ET\n";
-    $stream .= "BT /F2 9 Tf 410 722 Td (Booking Date: {$sOrderDate}) Tj ET\n";
+    $stream .= "BT /F2 10.5 Tf 58 718 Td (ORDER NO: ) Tj /F2 15 Tf ({$sOrderCode}) Tj ET\n";
+    $stream .= "BT /F2 11 Tf 395 718 Td (Booking Date: {$sOrderDate}) Tj ET\n";
     // Order divider
-    $stream .= "1 w 48 710 m 547 710 l S\n";
+    $stream .= "1.2 w 48 704 m 547 704 l S\n";
 
     // 3. Deliver To / Consignee
-    $stream .= "BT /F2 8.5 Tf 58 695 Td (DELIVER TO / SHIP TO:) Tj ET\n";
-    $stream .= "BT /F2 7.5 Tf 485 695 Td ([CONSIGNEE]) Tj ET\n";
-    $stream .= "0.5 w 58 689 m 537 689 l S\n";
+    $stream .= "BT /F2 10.5 Tf 58 688 Td (DELIVER TO / SHIP TO:) Tj ET\n";
+    $stream .= "BT /F2 9.5 Tf 475 688 Td ([CONSIGNEE]) Tj ET\n";
+    $stream .= "0.5 w 58 682 m 537 682 l S\n";
 
-    $stream .= "BT /F2 12 Tf 58 672 Td ({$sCustName}) Tj ET\n";
-    $stream .= "BT /F2 8 Tf 58 656 Td (TEL / MOB: ) Tj /F2 10.5 Tf ({$sCustPhone}) Tj ET\n";
+    $stream .= "BT /F2 18 Tf 58 662 Td ({$sCustName}) Tj ET\n";
+    $stream .= "BT /F2 10 Tf 58 644 Td (TEL / MOB: ) Tj /F2 14 Tf ({$sCustPhone}) Tj ET\n";
 
-    $y = 640;
+    $y = 626;
     foreach ($addressLines as $al) {
         $cleanLine = $esc(substr($al, 0, 75));
-        $stream .= "BT /F1 9 Tf 58 {$y} Td ({$cleanLine}) Tj ET\n";
-        $y -= 14;
+        $stream .= "BT /F1 12 Tf 58 {$y} Td ({$cleanLine}) Tj ET\n";
+        $y -= 16;
     }
 
     $y -= 4;
     $stream .= "0.5 w 58 {$y} m 537 {$y} l S\n";
-    $y -= 14;
-    $stream .= "BT /F2 9.5 Tf 58 {$y} Td (PIN CODE:) Tj ET\n";
-    $stream .= "BT /F2 13 Tf 475 {$y} Td ({$sPincode}) Tj ET\n";
+    $y -= 15;
+    $stream .= "BT /F2 11.5 Tf 58 {$y} Td (PIN CODE:) Tj ET\n";
+    $stream .= "BT /F2 18 Tf 465 {$y} Td ({$sPincode}) Tj ET\n";
 
     $y -= 8;
-    $stream .= "1 w 48 {$y} m 547 {$y} l S\n";
+    $stream .= "1.2 w 48 {$y} m 547 {$y} l S\n";
 
     // 4. Return If Undelivered To
-    $y -= 14;
-    $stream .= "BT /F2 8 Tf 58 {$y} Td (RETURN IF UNDELIVERED TO (BOOK STORE):) Tj ET\n";
-    $stream .= "BT /F1 7.5 Tf 420 {$y} Td (Postal Reg ID: 1879696070) Tj ET\n";
+    $y -= 15;
+    $stream .= "BT /F2 10 Tf 58 {$y} Td (RETURN IF UNDELIVERED TO (BOOK STORE):) Tj ET\n";
+    $stream .= "BT /F1 9 Tf 410 {$y} Td (Postal Reg ID: 1879696070) Tj ET\n";
+    $y -= 15;
+    $stream .= "BT /F2 13 Tf 58 {$y} Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
     $y -= 13;
-    $stream .= "BT /F2 10 Tf 58 {$y} Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
-    $y -= 11;
-    $stream .= "BT /F1 8.5 Tf 58 {$y} Td (Konark Theatre Lane, opp. ICICI ATM, Dilsukhnagar, Hyderabad, Telangana - 500060) Tj ET\n";
-    $y -= 11;
-    $stream .= "BT /F2 9 Tf 58 {$y} Td (Helpline / WhatsApp: 09177110134) Tj ET\n";
+    $stream .= "BT /F1 10.5 Tf 58 {$y} Td (Konark Theatre Lane, opp. ICICI ATM, Dilsukhnagar, Hyderabad, Telangana - 500060) Tj ET\n";
+    $y -= 13;
+    $stream .= "BT /F2 11 Tf 58 {$y} Td (Helpline / WhatsApp: 09177110134) Tj ET\n";
 
     $y -= 8;
-    $stream .= "1 w 48 {$y} m 547 {$y} l S\n";
+    $stream .= "1.2 w 48 {$y} m 547 {$y} l S\n";
 
     // 5. Book Description Manifest
-    $y -= 14;
-    $stream .= "BT /F2 8.5 Tf 58 {$y} Td (BOOK DESCRIPTION ({$itemsCount} {$titleWord})) Tj ET\n";
-    $stream .= "BT /F2 8 Tf 460 {$y} Td (TOTAL QTY: {$totalQty}) Tj ET\n";
+    $y -= 15;
+    $stream .= "BT /F2 11 Tf 58 {$y} Td (BOOK DESCRIPTION ({$itemsCount} {$titleWord})) Tj ET\n";
+    $stream .= "BT /F2 10.5 Tf 450 {$y} Td (TOTAL QTY: {$totalQty}) Tj ET\n";
     $y -= 6;
     $stream .= "0.5 w 58 {$y} m 537 {$y} l S\n";
 
-    $y -= 13;
+    $y -= 15;
     foreach ($items as $idx => $it) {
         $num = $idx + 1;
         $rawTitle = $it['product_name'] ?? 'Competitive Examination Book';
         $cleanTitle = preg_replace('/\.{2,}$/', '', trim($rawTitle));
-        $title = $esc(substr(formatBookTitleCase($cleanTitle), 0, 72));
+        $title = $esc(substr(formatBookTitleCase($cleanTitle), 0, 70));
         $qty = intval($it['qty'] ?? 1);
 
-        $stream .= "BT /F2 8.5 Tf 58 {$y} Td ({$num}. {$title}) Tj ET\n";
-        $stream .= "BT /F2 8.5 Tf 518 {$y} Td (x{$qty}) Tj ET\n";
-        $y -= 14;
-        if ($y < 85) break;
+        $stream .= "BT /F2 11.5 Tf 58 {$y} Td ({$num}. {$title}) Tj ET\n";
+        $stream .= "BT /F2 11.5 Tf 515 {$y} Td (x{$qty}) Tj ET\n";
+        $y -= 16;
+        if ($y < 75) break;
     }
 
     $stream .= "Q\n";
@@ -1699,7 +1699,7 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
         <style>
           @page {
             size: A4 portrait;
-            margin: 12mm 15mm;
+            margin: 8mm 10mm;
           }
           * {
             box-sizing: border-box;
@@ -1717,34 +1717,34 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
             background: #ffffff;
           }
           .inner-card {
-            border: 1px solid #000000;
-            margin: 2mm;
+            border: none;
+            margin: 0;
           }
           /* Section 1: Header */
           .header-box {
             border-bottom: 2px solid #000000;
             background: #ffffff;
-            padding: 10px 14px;
+            padding: 12px 16px;
           }
           .header-table {
             width: 100%;
             border-collapse: collapse;
           }
           .brand-title {
-            font-size: 15px;
+            font-size: 20px;
             font-weight: 900;
             letter-spacing: 0.5px;
             text-transform: uppercase;
             color: #000000;
             margin: 0;
-            line-height: 1.1;
+            line-height: 1.15;
           }
           .brand-subtitle {
-            font-size: 8px;
+            font-size: 10px;
             font-weight: bold;
             color: #334155;
             margin-top: 4px;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.4px;
           }
           .badge-box {
             text-align: right;
@@ -1755,18 +1755,18 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
             border: 2px solid #000000;
             background: #ffffff;
             color: #000000;
-            font-size: 9.5px;
+            font-size: 12.5px;
             font-weight: 900;
-            padding: 3px 10px;
+            padding: 4px 12px;
             border-radius: 4px;
             letter-spacing: 1px;
             text-transform: uppercase;
           }
           /* Section 2: Order Strip */
           .order-strip {
-            border-bottom: 1px solid #000000;
+            border-bottom: 1.5px solid #000000;
             background: #ffffff;
-            padding: 7px 14px;
+            padding: 8px 16px;
           }
           .order-table {
             width: 100%;
@@ -1774,13 +1774,13 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
           }
           .order-code-text {
             font-family: 'Courier New', Courier, monospace;
-            font-size: 13.5px;
+            font-size: 16.5px;
             font-weight: 900;
             color: #000000;
             letter-spacing: 0.5px;
           }
           .order-label {
-            font-size: 8.5px;
+            font-size: 11px;
             font-weight: bold;
             color: #64748b;
             text-transform: uppercase;
@@ -1788,166 +1788,169 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
           }
           .order-date-text {
             text-align: right;
-            font-size: 9.5px;
+            font-size: 12px;
             font-weight: bold;
             color: #334155;
           }
           /* Section 3: Deliver To */
           .deliver-box {
-            border-bottom: 1px solid #000000;
+            border-bottom: 1.5px solid #000000;
             background: #ffffff;
-            padding: 11px 14px;
+            padding: 13px 16px;
           }
           .tag-table {
             width: 100%;
             border-collapse: collapse;
-            border-bottom: 1px solid #e2e8f0;
-            padding-bottom: 3px;
-            margin-bottom: 6px;
+            border-bottom: 1px solid #cbd5e1;
+            padding-bottom: 4px;
+            margin-bottom: 7px;
           }
           .tag-title {
-            font-size: 9px;
+            font-size: 11.5px;
             font-weight: 900;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #475569;
+            color: #334155;
           }
           .tag-badge {
             text-align: right;
-            font-size: 7.5px;
+            font-size: 10.5px;
             font-weight: 900;
             text-transform: uppercase;
             color: #475569;
           }
           .tag-pill {
             background: #f1f5f9;
-            padding: 1px 6px;
+            padding: 2px 7px;
             border-radius: 3px;
           }
           .customer-title {
-            font-size: 14.5px;
+            font-size: 20px;
             font-weight: 900;
             text-transform: uppercase;
             color: #000000;
-            margin: 4px 0 2px 0;
-            line-height: 1.2;
+            margin: 5px 0 3px 0;
+            line-height: 1.25;
+            letter-spacing: 0.2px;
           }
           .phone-strip {
-            font-size: 11.5px;
+            font-size: 15px;
             font-weight: bold;
             color: #000000;
-            margin: 4px 0;
+            margin: 5px 0;
           }
           .tel-pill {
             display: inline-block;
             border: 1px solid #000000;
             background: #ffffff;
             color: #000000;
-            font-size: 8px;
+            font-size: 10.5px;
             font-weight: bold;
-            padding: 1px 5px;
+            padding: 2px 6px;
             border-radius: 3px;
-            margin-right: 5px;
+            margin-right: 6px;
           }
           .tel-num {
             font-family: 'Courier New', Courier, monospace;
+            font-size: 15.5px;
             font-weight: 900;
             letter-spacing: 0.5px;
           }
           .addr-line {
-            font-size: 11px;
+            font-size: 13.5px;
             font-weight: 600;
             color: #0f172a;
-            line-height: 1.35;
-            margin: 2px 0;
+            line-height: 1.45;
+            margin: 3px 0;
           }
           .pin-table {
             width: 100%;
             border-collapse: collapse;
-            border-top: 1px solid #e2e8f0;
-            padding-top: 5px;
-            margin-top: 6px;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 6px;
+            margin-top: 8px;
           }
           .pin-title {
-            font-size: 9.5px;
+            font-size: 12.5px;
             font-weight: 900;
             text-transform: uppercase;
-            color: #334155;
+            color: #1e293b;
             letter-spacing: 0.5px;
           }
           .pin-code-num {
             text-align: right;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 13.5px;
+            font-size: 20px;
             font-weight: 900;
             color: #000000;
             letter-spacing: 2px;
           }
           /* Section 4: Return Info */
           .return-box {
-            border-bottom: 1px solid #000000;
+            border-bottom: 1.5px solid #000000;
             background: #f8fafc;
-            padding: 9px 14px;
-            font-size: 9px;
-            line-height: 1.35;
+            padding: 10px 16px;
+            font-size: 11px;
+            line-height: 1.4;
           }
           .return-top-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 3px;
+            margin-bottom: 4px;
           }
           .return-hdr {
-            font-size: 8px;
+            font-size: 10.5px;
             font-weight: 900;
             text-transform: uppercase;
             color: #475569;
+            letter-spacing: 0.5px;
           }
           .reg-pill {
             text-align: right;
-            font-size: 8px;
+            font-size: 10px;
             font-weight: bold;
             color: #1e293b;
           }
           .reg-inner {
             background: #e2e8f0;
-            padding: 1px 5px;
+            padding: 2px 6px;
             border-radius: 3px;
           }
           .store-name-text {
-            font-size: 10.5px;
+            font-size: 14px;
             font-weight: 900;
             text-transform: uppercase;
             color: #000000;
             margin: 2px 0;
           }
           .store-addr-text {
-            font-size: 8.5px;
+            font-size: 11px;
             color: #1e293b;
             margin: 2px 0;
           }
           .store-phone-text {
-            font-size: 9px;
+            font-size: 11.5px;
             font-weight: bold;
             color: #000000;
-            margin-top: 3px;
+            margin-top: 4px;
           }
           /* Section 5: Manifest */
           .manifest-box {
             background: #ffffff;
-            padding: 10px 14px;
+            padding: 11px 16px;
           }
           .manifest-hdr-table {
             width: 100%;
             border-collapse: collapse;
-            border-bottom: 1px solid #cbd5e1;
-            padding-bottom: 4px;
-            margin-bottom: 6px;
+            border-bottom: 1.5px solid #cbd5e1;
+            padding-bottom: 5px;
+            margin-bottom: 7px;
           }
           .manifest-title {
-            font-size: 8.5px;
+            font-size: 11.5px;
             font-weight: 900;
             text-transform: uppercase;
-            color: #334155;
+            color: #1e293b;
             letter-spacing: 0.5px;
           }
           .manifest-qty {
@@ -1955,11 +1958,11 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
           }
           .manifest-qty-badge {
             font-family: 'Courier New', Courier, monospace;
-            font-size: 8.5px;
+            font-size: 11px;
             font-weight: 900;
             color: #000000;
             background: #f1f5f9;
-            padding: 2px 6px;
+            padding: 2px 8px;
             border-radius: 3px;
             border: 1px solid #cbd5e1;
           }
@@ -1968,23 +1971,23 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
             border-collapse: collapse;
           }
           .items-list-table td {
-            padding: 4px 0;
+            padding: 4.5px 0;
             border-bottom: 1px solid #f1f5f9;
             vertical-align: top;
           }
           .item-title-td {
-            font-size: 9.5px;
+            font-size: 12.5px;
             font-weight: bold;
             color: #000000;
-            padding-right: 8px;
-            line-height: 1.35;
+            padding-right: 10px;
+            line-height: 1.4;
           }
           .item-qty-td {
             text-align: right;
             vertical-align: top;
-            width: 35px;
+            width: 45px;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 9px;
+            font-size: 12px;
             font-weight: 900;
             color: #000000;
             white-space: nowrap;

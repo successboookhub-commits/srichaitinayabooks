@@ -6,7 +6,7 @@
 <style>
   @page {
     size: A4 portrait;
-    margin: 12mm 15mm;
+    margin: 8mm 10mm;
   }
   * {
     box-sizing: border-box;
@@ -24,34 +24,34 @@
     background: #ffffff;
   }
   .inner-card {
-    border: 1px solid #000000;
-    margin: 2mm;
+    border: none;
+    margin: 0;
   }
   /* Section 1: Header */
   .header-box {
     border-bottom: 2px solid #000000;
     background: #ffffff;
-    padding: 10px 14px;
+    padding: 12px 16px;
   }
   .header-table {
     width: 100%;
     border-collapse: collapse;
   }
   .brand-title {
-    font-size: 15px;
+    font-size: 20px;
     font-weight: 900;
     letter-spacing: 0.5px;
     text-transform: uppercase;
     color: #000000;
     margin: 0;
-    line-height: 1.1;
+    line-height: 1.15;
   }
   .brand-subtitle {
-    font-size: 8px;
+    font-size: 10px;
     font-weight: bold;
     color: #334155;
     margin-top: 4px;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.4px;
   }
   .badge-box {
     text-align: right;
@@ -62,18 +62,18 @@
     border: 2px solid #000000;
     background: #ffffff;
     color: #000000;
-    font-size: 9.5px;
+    font-size: 12.5px;
     font-weight: 900;
-    padding: 3px 10px;
+    padding: 4px 12px;
     border-radius: 4px;
     letter-spacing: 1px;
     text-transform: uppercase;
   }
   /* Section 2: Order Strip */
   .order-strip {
-    border-bottom: 1px solid #000000;
+    border-bottom: 1.5px solid #000000;
     background: #ffffff;
-    padding: 7px 14px;
+    padding: 8px 16px;
   }
   .order-table {
     width: 100%;
@@ -81,13 +81,13 @@
   }
   .order-code-text {
     font-family: monospace;
-    font-size: 13.5px;
+    font-size: 16.5px;
     font-weight: 900;
     color: #000000;
     letter-spacing: 0.5px;
   }
   .order-label {
-    font-size: 8.5px;
+    font-size: 11px;
     font-weight: bold;
     color: #64748b;
     text-transform: uppercase;
@@ -95,66 +95,67 @@
   }
   .order-date-text {
     text-align: right;
-    font-size: 9.5px;
+    font-size: 12px;
     font-weight: bold;
     color: #334155;
   }
   /* Section 3: Deliver To */
   .deliver-box {
-    border-bottom: 1px solid #000000;
+    border-bottom: 1.5px solid #000000;
     background: #ffffff;
-    padding: 11px 14px;
+    padding: 13px 16px;
   }
   .tag-table {
     width: 100%;
     border-collapse: collapse;
-    border-bottom: 1px solid #e2e8f0;
-    padding-bottom: 3px;
-    margin-bottom: 6px;
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 4px;
+    margin-bottom: 7px;
   }
   .tag-title {
-    font-size: 9px;
+    font-size: 11.5px;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 1px;
-    color: #475569;
+    color: #334155;
   }
   .tag-badge {
     text-align: right;
-    font-size: 7.5px;
+    font-size: 10.5px;
     font-weight: 900;
     text-transform: uppercase;
     color: #475569;
   }
   .tag-pill {
     background: #f1f5f9;
-    padding: 1px 6px;
+    padding: 2px 7px;
     border-radius: 3px;
   }
   .customer-title {
-    font-size: 14.5px;
+    font-size: 20px;
     font-weight: 900;
     text-transform: uppercase;
     color: #000000;
-    margin: 4px 0 2px 0;
-    line-height: 1.2;
+    margin: 5px 0 3px 0;
+    line-height: 1.25;
+    letter-spacing: 0.2px;
   }
   .phone-strip {
-    font-size: 11.5px;
+    font-size: 15px;
     font-weight: bold;
     color: #000000;
-    margin: 4px 0;
+    margin: 5px 0;
   }
   .tel-pill {
     display: inline-block;
     border: 1px solid #000000;
     background: #ffffff;
     color: #000000;
-    font-size: 8px;
+    font-size: 10.5px;
     font-weight: bold;
-    padding: 1px 5px;
+    padding: 2px 6px;
     border-radius: 3px;
-    margin-right: 5px;
+    margin-right: 6px;
   }
   .tel-num {
     font-family: monospace;
@@ -162,99 +163,100 @@
     letter-spacing: 0.5px;
   }
   .addr-line {
-    font-size: 11px;
+    font-size: 13.5px;
     font-weight: 600;
     color: #0f172a;
-    line-height: 1.35;
-    margin: 2px 0;
+    line-height: 1.45;
+    margin: 3px 0;
   }
   .pin-table {
     width: 100%;
     border-collapse: collapse;
-    border-top: 1px solid #e2e8f0;
-    padding-top: 5px;
-    margin-top: 6px;
+    border-top: 1px solid #cbd5e1;
+    padding-top: 6px;
+    margin-top: 8px;
   }
   .pin-title {
-    font-size: 9.5px;
+    font-size: 12.5px;
     font-weight: 900;
     text-transform: uppercase;
-    color: #334155;
+    color: #1e293b;
     letter-spacing: 0.5px;
   }
   .pin-code-num {
     text-align: right;
     font-family: monospace;
-    font-size: 13.5px;
+    font-size: 20px;
     font-weight: 900;
     color: #000000;
     letter-spacing: 2px;
   }
   /* Section 4: Return Info */
   .return-box {
-    border-bottom: 1px solid #000000;
+    border-bottom: 1.5px solid #000000;
     background: #f8fafc;
-    padding: 9px 14px;
-    font-size: 9px;
-    line-height: 1.35;
+    padding: 10px 16px;
+    font-size: 11px;
+    line-height: 1.4;
   }
   .return-top-table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 3px;
+    margin-bottom: 4px;
   }
   .return-hdr {
-    font-size: 8px;
+    font-size: 10.5px;
     font-weight: 900;
     text-transform: uppercase;
     color: #475569;
+    letter-spacing: 0.5px;
   }
   .reg-pill {
     text-align: right;
-    font-size: 8px;
+    font-size: 10px;
     font-weight: bold;
     color: #1e293b;
   }
   .reg-inner {
     background: #e2e8f0;
-    padding: 1px 5px;
+    padding: 2px 6px;
     border-radius: 3px;
   }
   .store-name-text {
-    font-size: 10.5px;
+    font-size: 14px;
     font-weight: 900;
     text-transform: uppercase;
     color: #000000;
     margin: 2px 0;
   }
   .store-addr-text {
-    font-size: 8.5px;
+    font-size: 11px;
     color: #1e293b;
     margin: 2px 0;
   }
   .store-phone-text {
-    font-size: 9px;
+    font-size: 11.5px;
     font-weight: bold;
     color: #000000;
-    margin-top: 3px;
+    margin-top: 4px;
   }
   /* Section 5: Manifest */
   .manifest-box {
     background: #ffffff;
-    padding: 10px 14px;
+    padding: 11px 16px;
   }
   .manifest-hdr-table {
     width: 100%;
     border-collapse: collapse;
-    border-bottom: 1px solid #cbd5e1;
-    padding-bottom: 4px;
-    margin-bottom: 6px;
+    border-bottom: 1.5px solid #cbd5e1;
+    padding-bottom: 5px;
+    margin-bottom: 7px;
   }
   .manifest-title {
-    font-size: 8.5px;
+    font-size: 11.5px;
     font-weight: 900;
     text-transform: uppercase;
-    color: #334155;
+    color: #1e293b;
     letter-spacing: 0.5px;
   }
   .manifest-qty {
@@ -262,11 +264,11 @@
   }
   .manifest-qty-badge {
     font-family: monospace;
-    font-size: 8.5px;
+    font-size: 11px;
     font-weight: 900;
     color: #000000;
     background: #f1f5f9;
-    padding: 2px 6px;
+    padding: 2px 8px;
     border-radius: 3px;
     border: 1px solid #cbd5e1;
   }
@@ -275,26 +277,27 @@
     border-collapse: collapse;
   }
   .items-list-table td {
-    padding: 4px 0;
+    padding: 4.5px 0;
     border-bottom: 1px solid #f1f5f9;
     vertical-align: top;
   }
   .item-title-td {
-    font-size: 9.5px;
+    font-size: 12.5px;
     font-weight: bold;
     color: #000000;
-    padding-right: 8px;
-    line-height: 1.35;
+    padding-right: 10px;
+    line-height: 1.4;
   }
   .item-qty-td {
     text-align: right;
     vertical-align: top;
-    width: 35px;
+    width: 45px;
     font-family: monospace;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 900;
     color: #000000;
     white-space: nowrap;
+  }
   }
 </style>
 </head>

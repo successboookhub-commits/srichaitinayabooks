@@ -93,8 +93,8 @@ const PAPER_CONFIGS = {
     dims: '210 × 297 mm',
     desc: 'Standard Office Paper (Full Dispatch Slip)',
     pageSizeCss: 'A4 portrait',
-    marginCss: '8mm',
-    widthMm: '175mm',
+    marginCss: '6mm',
+    widthMm: '192mm',
     minHeightMm: '240mm',
     maxHeightMm: null,
     isSheet: true,
@@ -318,75 +318,75 @@ export default function AdminOrderLabel({ orders, onClose }) {
                 style={{
                   width: selectedConfig.widthMm,
                   minHeight: selectedConfig.minHeightMm,
-                  padding: '2.5mm',
+                  padding: 0,
                   boxSizing: 'border-box',
                   fontFamily: 'Arial, Helvetica, sans-serif',
                 }}
               >
-                {/* INNER BORDER CONTAINER - Natural Top-to-Bottom Flow */}
-                <div className="w-full h-auto min-h-full border border-black flex flex-col justify-start leading-tight bg-white">
+                {/* INNER CONTAINER - Natural Top-to-Bottom Flow */}
+                <div className="w-full h-auto min-h-full flex flex-col justify-start leading-tight bg-white">
 
                   {/* 1. BRAND & ROUTING HEADER (White Background, Black Text) */}
-                  <div className="border-b-2 border-black bg-white text-black px-3 py-2 flex items-center justify-between shrink-0">
+                  <div className="border-b-2 border-black bg-white text-black px-4 sm:px-5 py-3 sm:py-3.5 flex items-center justify-between shrink-0">
                     <div>
-                      <h1 className="text-xs sm:text-[14px] font-black tracking-wider uppercase leading-none text-black">
+                      <h1 className="text-lg sm:text-[20px] font-black tracking-wider uppercase leading-tight text-black">
                         SRI CHAITANYA BOOK CENTRE
                       </h1>
-                      <p className="text-[8px] sm:text-[8.5px] font-bold text-slate-700 mt-1 tracking-wide">
+                      <p className="text-[10px] sm:text-[11px] font-bold text-slate-700 mt-1 tracking-wide">
                         ESTD. 1986 | DILSUKHNAGAR, HYDERABAD • COMPETITIVE EXAM BOOKS
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="border-2 border-black bg-white text-black font-black text-[9px] sm:text-[10px] px-2.5 py-0.5 rounded uppercase tracking-wider shadow-2xs">
+                      <span className="border-2 border-black bg-white text-black font-black text-xs sm:text-[13px] px-3.5 py-1 rounded uppercase tracking-wider shadow-2xs">
                         {order.status === 'Paid' ? 'PREPAID' : 'POSTAL PARCEL'}
                       </span>
                     </div>
                   </div>
 
                   {/* 2. ORDER ID & BOOKING DATE STRIP (Barcode & Surface/Speed Post Removed) */}
-                  <div className="border-b border-black px-3 py-2 bg-white shrink-0">
+                  <div className="border-b border-black px-4 sm:px-5 py-2.5 sm:py-3 bg-white shrink-0">
                     {showBarcode && (
                       <div className="pb-1 mb-1 border-b border-slate-200">
-                        <BarcodeSvg text={order.order_code || `ORD${order.id}`} height={selectedConfig.isSheet ? 30 : 24} />
+                        <BarcodeSvg text={order.order_code || `ORD${order.id}`} height={selectedConfig.isSheet ? 34 : 26} />
                       </div>
                     )}
-                    <div className="flex items-center justify-between text-[9.5px] sm:text-[10px]">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[8.5px] sm:text-[9px] font-bold text-slate-500 uppercase">ORDER NO:</span>
-                        <span className="font-mono font-black text-[11.5px] sm:text-[12.5px] tracking-wider text-black">
+                    <div className="flex items-center justify-between text-xs sm:text-[13px]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] sm:text-[12px] font-bold text-slate-500 uppercase">ORDER NO:</span>
+                        <span className="font-mono font-black text-[15px] sm:text-[17px] tracking-wider text-black">
                           {order.order_code || `ORD${order.id}`}
                         </span>
                       </div>
-                      <span className="text-slate-700 font-bold text-[9px] sm:text-[9.5px]">
+                      <span className="text-slate-800 font-bold text-xs sm:text-[13px]">
                         Booking Date: {order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </span>
                     </div>
                   </div>
 
                   {/* 3. DELIVER TO / SHIP TO: CONTIGUOUS FLOW - NO BLANK GAPS */}
-                  <div className="border-b border-black p-2.5 sm:p-3 bg-white flex flex-col justify-start shrink-0">
-                    <div className="flex items-center justify-between pb-1 border-b border-slate-200 mb-1">
-                      <span className="text-[9px] sm:text-[9.5px] font-black uppercase tracking-widest text-slate-600">
+                  <div className="border-b border-black p-4 sm:p-5 bg-white flex flex-col justify-start shrink-0">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 mb-2">
+                      <span className="text-xs sm:text-[13px] font-black uppercase tracking-widest text-slate-700">
                         DELIVER TO / SHIP TO:
                       </span>
-                      <span className="text-[8px] sm:text-[8.5px] font-black text-slate-500 uppercase tracking-wider bg-slate-100 px-1.5 py-0.2 rounded">
+                      <span className="text-[10px] sm:text-[11px] font-black text-slate-600 uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded">
                         CONSIGNEE
                       </span>
                     </div>
 
                     {/* Customer Name */}
-                    <p className="text-[13.5px] sm:text-[15px] font-black uppercase text-black tracking-tight leading-snug">
+                    <p className="text-xl sm:text-[22px] font-black uppercase text-black tracking-tight leading-snug my-1">
                       {order.customer_name || order.customer?.name || 'Customer Name'}
                     </p>
 
                     {/* Contact Phone */}
-                    <p className="text-[12px] sm:text-[13px] font-black text-black my-1 flex items-center gap-1.5">
-                      <span className="border border-black bg-white text-black text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded font-mono font-bold">TEL / MOB</span>
+                    <p className="text-base sm:text-[17px] font-black text-black my-2 flex items-center gap-2">
+                      <span className="border border-black bg-white text-black text-[10px] sm:text-[11px] px-2 py-0.5 rounded font-mono font-bold">TEL / MOB</span>
                       <span className="font-mono tracking-wider">{order.customer_phone || order.customer?.phone || '-'}</span>
                     </p>
 
                     {/* Full Address Lines */}
-                    <div className="text-[10px] sm:text-[11.5px] font-semibold text-slate-900 leading-[1.35] space-y-0.5 my-0.5">
+                    <div className="text-sm sm:text-[14.5px] font-semibold text-slate-900 leading-[1.5] space-y-1 my-1.5">
                       {addressLines.map((line, lIdx) => (
                         <p key={lIdx} className="capitalize">
                           {line}
@@ -394,46 +394,46 @@ export default function AdminOrderLabel({ orders, onClose }) {
                       ))}
                     </div>
 
-                    {/* Destination PIN Code - Clean at bottom of To Address (No heavy black background) */}
-                    <div className="mt-1.5 pt-1 border-t border-slate-200 flex items-center justify-between">
-                      <span className="text-[9.5px] sm:text-[10px] font-black uppercase text-slate-700 tracking-wider">
+                    {/* Destination PIN Code - Prominent and Clear */}
+                    <div className="mt-2.5 pt-2 border-t border-slate-200 flex items-center justify-between">
+                      <span className="text-sm sm:text-[14.5px] font-black uppercase text-slate-800 tracking-wider">
                         PIN CODE:
                       </span>
-                      <span className="font-mono font-black text-[13px] sm:text-[14px] text-black tracking-widest">
+                      <span className="font-mono font-black text-xl sm:text-[22px] text-black tracking-widest">
                         {order.pincode || '-'}
                       </span>
                     </div>
                   </div>
 
                   {/* 4. DISPATCH FROM / SENDER DETAILS */}
-                  <div className="border-b border-black p-2 sm:p-2.5 bg-slate-50 text-[9px] sm:text-[9.5px] leading-tight shrink-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-slate-600">
+                  <div className="border-b border-black p-3.5 sm:p-4 bg-slate-50 text-[11px] sm:text-[12px] leading-snug shrink-0">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-600">
                         RETURN IF UNDELIVERED TO (BOOK STORE):
                       </span>
-                      <span className="font-mono text-[8px] sm:text-[8.5px] font-bold text-slate-800 bg-slate-200 px-1.5 py-0.2 rounded">
+                      <span className="font-mono text-[9.5px] sm:text-[10.5px] font-bold text-slate-800 bg-slate-200 px-2 py-0.5 rounded">
                         Postal Reg ID: 1879696070
                       </span>
                     </div>
-                    <p className="font-black text-[10.5px] sm:text-[11px] uppercase text-black">
+                    <p className="font-black text-sm sm:text-[14.5px] uppercase text-black">
                       SRI CHAITANYA BOOK CENTRE
                     </p>
-                    <p className="text-slate-800 text-[8.5px] sm:text-[9px] font-medium leading-snug mt-0.5">
+                    <p className="text-slate-800 text-[11px] sm:text-[12px] font-medium leading-snug mt-0.5">
                       Konark Theatre Lane, opp. ICICI ATM, Dilsukhnagar, Hyderabad, Telangana - 500060
                     </p>
-                    <p className="text-black text-[9px] sm:text-[9.5px] font-bold mt-1">
-                      Helpline / WhatsApp: <span className="font-mono font-black text-[9.5px] sm:text-[10px]">09177110134</span>
+                    <p className="text-black text-xs sm:text-[13px] font-bold mt-1.5">
+                      Helpline / WhatsApp: <span className="font-mono font-black text-xs sm:text-[13.5px]">09177110134</span>
                     </p>
                   </div>
 
                   {/* 5. ITEM CONTENTS MANIFEST - ALL TITLES INCLUDED (No "+more titles" truncation) */}
-                  <div className="p-2 sm:p-2.5 bg-white text-[9px] sm:text-[9.5px] shrink-0 border-b border-black/20">
-                    <div className="flex justify-between items-center text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider text-slate-700 border-b border-slate-300 pb-0.5 mb-1">
+                  <div className="p-3.5 sm:p-4 bg-white text-xs sm:text-[13px] shrink-0 border-b border-black/20">
+                    <div className="flex justify-between items-center text-[11px] sm:text-[12px] font-black uppercase tracking-wider text-slate-700 border-b border-slate-300 pb-1 mb-2">
                       <span>BOOK DESCRIPTION ({items.length || 1} TITLE{items.length > 1 ? 'S' : ''})</span>
-                      <span className="font-mono font-black bg-slate-100 px-2 py-0.5 rounded border border-slate-300">TOTAL QTY: {totalQty || 1}</span>
+                      <span className="font-mono font-black bg-slate-100 px-2.5 py-0.5 rounded border border-slate-300">TOTAL QTY: {totalQty || 1}</span>
                     </div>
 
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       {items.length > 0 ? (
                         items.map((item, iIdx) => {
                           const rawTitle = item.product_name || item.book_title || item.name || 'Competitive Book';
@@ -442,18 +442,18 @@ export default function AdminOrderLabel({ orders, onClose }) {
                           const title = toTitleCase(cleanTitle);
                           const qty = item.qty || item.quantity || 1;
                           return (
-                            <div key={iIdx} className="flex justify-between items-start text-[8.5px] sm:text-[9px] leading-snug py-0.5 border-b border-slate-100 last:border-b-0">
-                              <span className="font-semibold text-black pr-2 flex-1 break-words whitespace-normal leading-snug">
+                            <div key={iIdx} className="flex justify-between items-start text-xs sm:text-[13.5px] leading-snug py-1 border-b border-slate-100 last:border-b-0">
+                              <span className="font-semibold text-black pr-3 flex-1 break-words whitespace-normal leading-snug">
                                 {iIdx + 1}. {title}
                               </span>
-                              <span className="font-mono font-black text-black shrink-0 bg-slate-100 px-1.5 py-0.2 rounded text-[8px] sm:text-[8.5px]">
+                              <span className="font-mono font-black text-black shrink-0 bg-slate-100 px-2 py-0.5 rounded text-[11px] sm:text-[12px]">
                                 x{qty}
                               </span>
                             </div>
                           );
                         })
                       ) : (
-                        <div className="flex justify-between items-start text-[8.5px] sm:text-[9px]">
+                        <div className="flex justify-between items-start text-xs sm:text-[13.5px]">
                           <span className="font-semibold text-black break-words whitespace-normal leading-snug">Sri Chaitanya Competitive Examination Material</span>
                           <span className="font-mono font-bold text-black shrink-0">x{totalQty || 1}</span>
                         </div>

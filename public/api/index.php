@@ -18,6 +18,26 @@ try {
     }
 } catch (\Throwable $e) {}
 
+// Auto-cleanup: permanently remove accidental dummy sync orders (Customer 9999999999 and dummy payment IDs)
+try {
+    $dummyIds = [
+        'pay_TzCX7xbd9hwkBe', 'pay_TzCSVuoZuN1fR6', 'pay_TzC35mV7SgCBSL', 'pay_TzAVu4dfvtwCZr',
+        'pay_TzAJvCYb7OACIw', 'pay_Tz9VtuuI14OPv8', 'pay_Tz9RKT6TKRAfpK', 'pay_Tz8FG6qGQ6IfAB',
+        'pay_Tz85VJjx0PrDrK5', 'pay_Tz74F4x5Mrz1fY', 'pay_TyxxZ9BmGxtlrP', 'pay_Tyv4yllUgNm4GJ',
+        'pay_Tyu0WDWGkX5Si2', 'pay_Tyskn9K35mszgf'
+    ];
+    $inClause = "'" . implode("','", $dummyIds) . "'";
+    $stmt = $pdo->query("SELECT id FROM orders WHERE razorpay_payment_id IN ($inClause) OR customer_id IN (SELECT id FROM customers WHERE phone = '9999999999' AND name = 'Customer')");
+    $delOrderIds = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
+    if (!empty($delOrderIds)) {
+        $idList = implode(',', array_map('intval', $delOrderIds));
+        $pdo->exec("DELETE FROM order_items WHERE order_id IN ($idList)");
+        $pdo->exec("DELETE FROM orders WHERE id IN ($idList)");
+        clearStoreCache();
+    }
+    $pdo->exec("DELETE FROM customers WHERE phone = '9999999999' AND name = 'Customer'");
+} catch (\Throwable $e) {}
+
 $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/api', PHP_URL_PATH);
 $path = preg_replace('#^.*?/api/?#i', '', $uri);
 $path = trim($path, '/');
@@ -2843,105 +2863,6 @@ if ($path === 'orders/bulk-status-by-date' && $method === 'POST') {
     }
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'Date range and status are required.']);
-    exit;
-}
-
-// Razorpay Captured Payments Reconciliation & Auto-Recovery
-if (($path === 'orders/sync-razorpay' || $path === 'orders/sync') && in_array($method, ['GET', 'POST'])) {
-    $rzpRes = callRazorpayApi('GET', 'payments?count=50');
-    if (!$rzpRes['success'] || empty($rzpRes['data']['items'])) {
-        echo json_encode([
-            'success' => false,
-            'message' => 'Failed to fetch payments from Razorpay: ' . ($rzpRes['error'] ?? 'Empty response'),
-            'synced'  => 0,
-        ]);
-        exit;
-    }
-
-    $payments = $rzpRes['data']['items'];
-    $synced = 0;
-    $details = [];
-
-    foreach ($payments as $p) {
-        if (($p['status'] ?? '') !== 'captured') {
-            continue;
-        }
-
-        $pId = $p['id'];
-        $chk = $pdo->prepare('SELECT id, order_code FROM orders WHERE razorpay_payment_id = ? LIMIT 1');
-        $chk->execute([$pId]);
-        if ($chk->fetch()) {
-            continue; // Already exists in orders!
-        }
-
-        // Missing order! Let's recover it!
-        $rzpOrderId = $p['order_id'] ?? '';
-        $cached = null;
-        if (!empty($rzpOrderId)) {
-            $cacheFile = dirname(__DIR__) . '/storage/checkouts/' . preg_replace('/[^a-zA-Z0-9_-]/', '', $rzpOrderId) . '.json';
-            if (file_exists($cacheFile)) {
-                $cached = json_decode(file_get_contents($cacheFile), true);
-            }
-        }
-
-        $notes = $p['notes'] ?? [];
-        if (empty($notes) && !empty($rzpOrderId)) {
-            $oRes = callRazorpayApi('GET', 'orders/' . $rzpOrderId);
-            if ($oRes['success']) {
-                $notes = $oRes['data']['notes'] ?? [];
-            }
-        }
-
-        $cleanPhone = preg_replace('/\D/', '', (string)($notes['customer_phone'] ?? $p['contact'] ?? ''));
-        if (strlen($cleanPhone) !== 10) {
-            $cleanPhone = '9999999999';
-        }
-
-        $checkoutData = $cached['checkoutData'] ?? [
-            'name'     => $notes['customer_name'] ?? 'Customer',
-            'phone'    => $cleanPhone,
-            'email'    => $notes['customer_email'] ?? ($p['email'] ?? ''),
-            'door_no'  => $notes['door_no'] ?? '',
-            'address'  => $notes['address'] ?? 'Address recorded via Razorpay',
-            'mandal'   => $notes['mandal'] ?? '',
-            'district' => $notes['district'] ?? '',
-            'state'    => $notes['state'] ?? 'Telangana',
-            'pincode'  => $notes['pincode'] ?? '500001',
-        ];
-
-        $cart = $cached['cart'] ?? [];
-        $amt = floatval(($p['amount'] ?? 0) / 100);
-        $totals = $cached['totals'] ?? [
-            'subtotal' => max(0, $amt - 49),
-            'shipping' => 49.00,
-            'total'    => $amt,
-        ];
-
-        $res = createConfirmedOrder($pdo, [
-            'razorpay_payment_id' => $pId,
-            'razorpay_order_id'   => $rzpOrderId,
-            'customer'            => $checkoutData,
-            'cart'                => $cart,
-            'totals'              => $totals,
-            'summary'             => $notes['summary'] ?? ('Razorpay Captured Payment ' . $pId),
-        ]);
-
-        if ($res['success']) {
-            $synced++;
-            $details[] = [
-                'orderCode' => $res['orderCode'],
-                'paymentId' => $pId,
-                'amount'    => $amt,
-            ];
-        }
-    }
-
-    echo json_encode([
-        'success' => true,
-        'synced'  => $synced,
-        'message' => $synced > 0 ? "Successfully synced and restored {$synced} missing order(s) from Razorpay!" : 'All Razorpay payments are fully in sync with orders.',
-        'details' => $details,
-    ]);
     exit;
 }
 

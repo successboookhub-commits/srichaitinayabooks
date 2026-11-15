@@ -24,7 +24,7 @@ import {
   Layers,
   Sparkles,
   ArrowRight,
-  RefreshCw
+  Trash2
 } from 'lucide-react';
 import api from '../../services/api';
 import realtime, { playOrderChime } from '../../services/realtime';
@@ -64,42 +64,28 @@ export default function AdminOrders() {
   const [exporting, setExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState('csv'); // 'csv' (universal) or 'xls' (styled XML)
 
-  // Razorpay Reconciliation State
-  const [syncingRazorpay, setSyncingRazorpay] = useState(false);
-
-  // Manual / Auto-Sync with Razorpay to recover any captured payments missing from DB
-  const handleSyncRazorpay = async (silent = false) => {
+  // Single Order Deletion
+  const [deletingId, setDeletingId] = useState(null);
+  const handleDeleteOrder = async (orderId, orderCode) => {
+    if (!window.confirm(`Are you sure you want to delete order ${orderCode}? This action cannot be undone.`)) {
+      return;
+    }
     try {
-      if (!silent) {
-        setSyncingRazorpay(true);
-        setMessage('');
-        setError('');
-      }
-      const res = await api.post('/orders/sync-razorpay');
+      setDeletingId(orderId);
+      const res = await api.delete(`/orders/${orderId}`);
       if (res.data?.success) {
-        if (res.data.synced > 0) {
-          setMessage(`Success! ${res.data.synced} missing order(s) recovered and added from Razorpay.`);
-          fetchOrders(1, !silent);
-        } else if (!silent) {
-          setMessage('All Razorpay payments are 100% in sync with the database!');
-        }
-      } else if (!silent) {
-        setError(res.data?.message || 'Failed to sync with Razorpay.');
+        setMessage(`Order ${orderCode} deleted successfully.`);
+        fetchOrders(pagination.page || 1, false);
+      } else {
+        setError(res.data?.message || 'Failed to delete order.');
       }
     } catch (err) {
-      if (!silent) {
-        console.error('Razorpay sync error:', err);
-        setError(err.response?.data?.message || 'Error connecting to Razorpay API.');
-      }
+      console.error('Delete order error:', err);
+      setError(err.response?.data?.message || 'Error deleting order.');
     } finally {
-      if (!silent) setSyncingRazorpay(false);
+      setDeletingId(null);
     }
   };
-
-  // Run silent check on mount to ensure zero dropped orders
-  useEffect(() => {
-    handleSyncRazorpay(true);
-  }, []);
 
   // Single-Click Download All Orders or Filtered Orders in Excel
   const handleExportExcel = async (exportAll = true, chosenFormat = exportFormat) => {
@@ -471,20 +457,8 @@ export default function AdminOrders() {
           </div>
         )}
 
-        {/* ================= 1-CLICK ACTIONS & RAZORPAY SYNC ================= */}
+        {/* ================= 1-CLICK EXCEL DOWNLOAD ACTION BUTTONS ================= */}
         <div className="flex flex-wrap items-center gap-2.5">
-
-          {/* Razorpay Instant Reconciliation Button */}
-          <button
-            type="button"
-            onClick={() => handleSyncRazorpay(false)}
-            disabled={syncingRazorpay}
-            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/90 font-bold text-xs shadow-2xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-            title="Scan Razorpay for any completed payments and auto-restore missing orders instantly"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncingRazorpay ? 'animate-spin text-blue-600' : 'text-blue-500'}`} />
-            <span>{syncingRazorpay ? 'Checking Razorpay...' : 'Sync Razorpay'}</span>
-          </button>
           
           {/* Format selector (.CSV vs .XLS) */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-[11px] font-bold text-slate-600">
@@ -1034,6 +1008,14 @@ export default function AdminOrders() {
                           >
                             <FileText className="w-4 h-4" />
                           </a>
+                          <button
+                            onClick={() => handleDeleteOrder(o.id, o.order_code)}
+                            disabled={deletingId === o.id}
+                            className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-40"
+                            title="Delete Order"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>

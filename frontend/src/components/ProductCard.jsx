@@ -4,6 +4,7 @@ import { ShoppingBag, Zap, Check, Heart } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore.js';
 import { useWishlistStore } from '../store/useWishlistStore.js';
 import { getImageUrl } from '../services/api.js';
+import toTitleCase from '../utils/titleCase.js';
 
 export default function ProductCard({ product }) {
   const addItem = useCartStore((state) => state.addItem);
@@ -15,7 +16,8 @@ export default function ProductCard({ product }) {
   const isInCart = Boolean(cartItem);
   const stockQty = product.quantity !== undefined ? product.quantity : (product.stock ?? 99);
   const isOutOfStock = stockQty <= 0;
-  const name = product.name || product.title || 'Book Title';
+  const rawName = product.name || product.title || 'Book Title';
+  const name = toTitleCase(rawName);
   const price = parseFloat(product.total_price || product.price || 0);
   const oldPrice = parseFloat(product.old_price || 0);
   const discountPercent = product.discount || (oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : 0);

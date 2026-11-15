@@ -28,9 +28,9 @@ textarea {
   }
 }
 
-/* Strict iOS Safari & Mobile Viewport Movement Lock */
+/* Strict iOS Safari & Mobile Viewport Movement Lock (Uses overflow-x: clip so position: sticky header works) */
 html {
-  overflow-x: hidden !important;
+  overflow-x: clip !important;
   width: 100%;
   max-width: 100%;
   -webkit-text-size-adjust: 100%;
@@ -39,7 +39,7 @@ html {
 }
 
 body {
-  overflow-x: hidden !important;
+  overflow-x: clip !important;
   width: 100%;
   max-width: 100%;
   position: relative;
@@ -52,7 +52,7 @@ body {
 }
 
 #root {
-  overflow-x: hidden !important;
+  overflow-x: clip !important;
   width: 100%;
   max-width: 100%;
   position: relative;

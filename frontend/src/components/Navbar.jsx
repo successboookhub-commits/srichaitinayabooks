@@ -26,6 +26,7 @@ import {
 import { useCartStore } from '../store/useCartStore.js';
 import { useWishlistStore } from '../store/useWishlistStore.js';
 import api, { getImageUrl } from '../services/api.js';
+import toTitleCase from '../utils/titleCase.js';
 
 // Smart search ranking: prioritizes books whose names or words start with the search query
 function rankSearchResults(items, query) {
@@ -223,7 +224,10 @@ export default function Navbar() {
       </div>
 
       {/* ================= MAIN HIGH-END STICKY HEADER ================= */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
+      <header
+        className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
+        style={{ position: 'sticky', top: 0, zIndex: 40 }}
+      >
         <div className="w-full max-w-[1800px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-12">
           <div className="flex items-center justify-between h-15 sm:h-17 gap-2 sm:gap-4">
             
@@ -354,7 +358,7 @@ export default function Navbar() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-slate-800 truncate group-hover:text-red-600">
-                              {item.name}
+                              {toTitleCase(item.name)}
                             </p>
                             {item.publication_name && (
                               <p className="text-[10px] text-slate-400 truncate">
@@ -846,7 +850,7 @@ export default function Navbar() {
                       </div>
                       <div className="flex-1 min-w-0 space-y-1">
                         <p className="text-xs sm:text-sm font-medium text-slate-800 leading-snug line-clamp-2">
-                          {item.name}
+                          {toTitleCase(item.name)}
                         </p>
                         {item.publication_name && (
                           <p className="text-[10px] font-semibold text-slate-500 truncate">

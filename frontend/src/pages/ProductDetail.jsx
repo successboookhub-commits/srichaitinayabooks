@@ -22,6 +22,7 @@ import { useWishlistStore } from '../store/useWishlistStore.js';
 import { useRecentViewsStore } from '../store/useRecentViewsStore.js';
 import ProductCard from '../components/ProductCard.jsx';
 import RecentlyViewedBooks from '../components/RecentlyViewedBooks.jsx';
+import toTitleCase from '../utils/titleCase.js';
 
 export default function ProductDetail() {
   const { id, slug: paramSlug } = useParams();
@@ -127,7 +128,7 @@ export default function ProductDetail() {
           <Link to="/shop" className="hover:text-red-600 transition-colors">Store</Link>
           <span className="text-slate-300">/</span>
           <span className="text-slate-800 font-medium truncate max-w-[200px] sm:max-w-md">
-            {product.name || product.title}
+            {toTitleCase(product.name || product.title)}
           </span>
         </nav>
 
@@ -220,7 +221,7 @@ export default function ProductDetail() {
               {/* Title - clean, simple, not bold */}
               <div>
                 <h1 className="text-sm sm:text-base lg:text-lg font-medium text-slate-800 leading-snug tracking-tight line-clamp-2">
-                  {product.name || product.title}
+                  {toTitleCase(product.name || product.title)}
                 </h1>
               </div>
 

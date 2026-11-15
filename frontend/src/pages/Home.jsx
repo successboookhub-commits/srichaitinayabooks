@@ -36,8 +36,8 @@ export default function Home() {
       if (isMounted && res.data?.success) setCategories((res.data.categories || []).slice(0, 10));
     }).catch(() => {});
 
-    // 2. Stream in Sections & Featured Products in parallel
-    api.getCached('/home-sections').then((res) => {
+    // 2. Stream in Sections & Featured Products in real-time (bypassing stale cache)
+    api.get(`/home-sections?nocache=1&_t=${Date.now()}`).then((res) => {
       if (isMounted && res.data?.success) {
         if (res.data.sections) setHomeSections(res.data.sections);
         if (res.data.categorySections) setCategorySections(res.data.categorySections);
@@ -46,26 +46,29 @@ export default function Home() {
       }
     }).catch(() => {});
 
-    api.getCached('/products?featured=true&limit=12').then((res) => {
+    api.get(`/products?featured=true&nocache=1&limit=24&_t=${Date.now()}`).then((res) => {
       if (isMounted && res.data?.success) setFeaturedProducts(res.data.products || []);
     }).catch(() => {});
 
-    api.getCached('/products?limit=12').then((res) => {
+    api.get(`/products?limit=12&_t=${Date.now()}`).then((res) => {
       if (isMounted && res.data?.success) setRecentProducts(res.data.products || []);
     }).catch(() => {});
 
     // 3. Real-Time Store Sync: Automatically refresh on live updates
     const unsubscribe = realtime.on('store_updated', () => {
       if (!isMounted) return;
-      api.getCached('/banners', { params: { _r: Date.now() } }).then((res) => {
+      api.get(`/banners?_t=${Date.now()}`).then((res) => {
         if (res.data?.success) setBanners(res.data.banners || []);
       });
-      api.getCached('/home-sections', { params: { _r: Date.now() } }).then((res) => {
+      api.get(`/home-sections?nocache=1&_t=${Date.now()}`).then((res) => {
         if (res.data?.success) {
           if (res.data.sections) setHomeSections(res.data.sections);
           if (res.data.categorySections) setCategorySections(res.data.categorySections);
           if (res.data.publicationSections) setPublicationSections(res.data.publicationSections);
         }
+      });
+      api.get(`/products?featured=true&nocache=1&limit=24&_t=${Date.now()}`).then((res) => {
+        if (res.data?.success) setFeaturedProducts(res.data.products || []);
       });
     });
 

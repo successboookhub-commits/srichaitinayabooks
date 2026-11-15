@@ -12,6 +12,7 @@ import {
 import { useWishlistStore } from '../store/useWishlistStore.js';
 import { useCartStore } from '../store/useCartStore.js';
 import { getImageUrl } from '../services/api.js';
+import toTitleCase from '../utils/titleCase.js';
 
 export default function WishlistDrawer() {
   const navigate = useNavigate();
@@ -129,7 +130,7 @@ export default function WishlistDrawer() {
                           onClick={() => setWishlistOpen(false)}
                           className="font-medium text-xs text-slate-800 hover:text-red-600 line-clamp-2 leading-snug transition-colors"
                         >
-                          {item.name}
+                          {toTitleCase(item.name)}
                         </Link>
                         {item.publication_name && (
                           <span className="text-[10px] text-slate-500 font-medium block truncate mt-0.5">

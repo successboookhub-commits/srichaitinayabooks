@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Lock, AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore.js';
 import api from '../services/api.js';
+import toTitleCase from '../utils/titleCase.js';
 
 // Dynamically load Razorpay SDK if not already loaded
 const loadRazorpayScript = () => {
@@ -431,7 +432,7 @@ export default function Checkout() {
               {cart.map((item) => (
                 <div key={item.id} className="py-3 first:pt-0 flex justify-between gap-3 text-xs">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-800 truncate">{item.name}</p>
+                    <p className="font-medium text-slate-800 truncate">{toTitleCase(item.name)}</p>
                     <p className="text-gray-400 mt-0.5">Qty: {item.qty} × ₹{item.price.toFixed(2)}</p>
                   </div>
                   <span className="font-bold text-gray-900 shrink-0">

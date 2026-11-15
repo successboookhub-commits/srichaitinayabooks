@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Printer, X, CheckCircle2, FileText, ChevronDown } from 'lucide-react';
+import toTitleCase from '../../utils/titleCase.js';
 
 // Authentic 1D Code 39 Barcode SVG Component
 function BarcodeSvg({ text, height = 30 }) {
@@ -231,8 +232,8 @@ export default function AdminOrderLabel({ orders, onClose }) {
               type="button"
               onClick={() => setPaperSize(cfg.id)}
               className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer shrink-0 ${paperSize === cfg.id
-                  ? 'bg-red-600 text-white border-red-600 shadow-xs'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
             >
               {cfg.name}
@@ -420,7 +421,7 @@ export default function AdminOrderLabel({ orders, onClose }) {
                     <div className="space-y-0.5 max-h-[22mm] overflow-hidden">
                       {items.length > 0 ? (
                         items.slice(0, 4).map((item, iIdx) => {
-                          const title = item.product_name || item.book_title || item.name || 'Competitive Book';
+                          const title = toTitleCase(item.product_name || item.book_title || item.name || 'Competitive Book');
                           const qty = item.qty || item.quantity || 1;
                           return (
                             <div key={iIdx} className="flex justify-between items-start text-[8.5px] sm:text-[9px] leading-tight">

@@ -27,6 +27,7 @@ import {
   Filter
 } from 'lucide-react';
 import api, { getImageUrl } from '../../services/api.js';
+import toTitleCase from '../../utils/titleCase.js';
 
 export default function AdminProducts() {
   const [products, setProducts] = useState([]);
@@ -321,7 +322,7 @@ export default function AdminProducts() {
       formData.append('publication_id', form.publication_id);
       formData.append('category_ids', JSON.stringify(form.category_ids));
       if (form.category_ids[0]) formData.append('category_id', form.category_ids[0]);
-      
+
       formData.append('old_price', form.old_price || form.total_price);
       formData.append('discount', form.discount || '0');
       formData.append('total_price', form.total_price);
@@ -354,7 +355,7 @@ export default function AdminProducts() {
           const localCosts = JSON.parse(localStorage.getItem('srichaitanya_purchase_amounts') || '{}');
           localCosts[editingProduct.id] = parseFloat(form.purchase_amount || 0);
           localStorage.setItem('srichaitanya_purchase_amounts', JSON.stringify(localCosts));
-        } catch (e) {}
+        } catch (e) { }
         setFeedback({ type: 'success', text: `Book "${form.name}" updated successfully!` });
       } else {
         const createRes = await api.post('/products', formData, {
@@ -366,7 +367,7 @@ export default function AdminProducts() {
             const localCosts = JSON.parse(localStorage.getItem('srichaitanya_purchase_amounts') || '{}');
             localCosts[createdId] = parseFloat(form.purchase_amount || 0);
             localStorage.setItem('srichaitanya_purchase_amounts', JSON.stringify(localCosts));
-          } catch (e) {}
+          } catch (e) { }
         }
         setFeedback({ type: 'success', text: `New book "${form.name}" created successfully!` });
       }
@@ -401,24 +402,41 @@ export default function AdminProducts() {
     try {
       const formData = new FormData();
       formData.append('is_featured', String(newFeatured));
-      await api.post(`/products/${product.id}`, formData);
+      await api.post(`/products/${product.id}/toggle-featured`, formData);
       setProducts((prev) =>
         prev.map((item) => (item.id === product.id ? { ...item, is_featured: newFeatured } : item))
       );
+      api.clearCache();
       setFeedback({
         type: 'success',
         text: `"${product.name || product.title}" is ${newFeatured ? 'now Featured on Homepage' : 'removed from Featured'}.`,
       });
       setTimeout(() => setFeedback({ type: '', text: '' }), 3500);
     } catch (err) {
-      console.error('Failed to toggle featured:', err);
-      alert('Failed to update featured status.');
+      console.error('Failed to toggle featured via custom endpoint, trying standard update:', err);
+      try {
+        const formData = new FormData();
+        formData.append('is_featured', String(newFeatured));
+        await api.post(`/products/${product.id}`, formData);
+        setProducts((prev) =>
+          prev.map((item) => (item.id === product.id ? { ...item, is_featured: newFeatured } : item))
+        );
+        api.clearCache();
+        setFeedback({
+          type: 'success',
+          text: `"${product.name || product.title}" is ${newFeatured ? 'now Featured on Homepage' : 'removed from Featured'}.`,
+        });
+        setTimeout(() => setFeedback({ type: '', text: '' }), 3500);
+      } catch (err2) {
+        console.error('Failed fallback update:', err2);
+        alert('Failed to update featured status.');
+      }
     }
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto font-sans">
-      
+
       {/* ================= TOP HEADER STRIP ================= */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-2xs">
         <div>
@@ -460,11 +478,10 @@ export default function AdminProducts() {
       {/* Feedback Banner */}
       {feedback.text && (
         <div
-          className={`p-4 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
-            feedback.type === 'success'
+          className={`p-4 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${feedback.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
               : 'bg-rose-50 text-rose-800 border border-rose-200'
-          }`}
+            }`}
         >
           <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
           <span>{feedback.text}</span>
@@ -473,7 +490,7 @@ export default function AdminProducts() {
 
       {/* ================= SEARCH & ADVANCED FILTERS PANEL ================= */}
       <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs space-y-4">
-        
+
         {/* Row 1: Search Input Bar */}
         <div className="flex flex-col sm:flex-row items-center gap-3">
           <div className="relative flex-1 w-full">
@@ -525,7 +542,7 @@ export default function AdminProducts() {
 
         {/* Row 2: Filter Selectors (Publications, Categories, Stock, Featured) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-          
+
           {/* Publication Filter */}
           <div className="space-y-1">
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
@@ -737,7 +754,8 @@ export default function AdminProducts() {
                 </tr>
               ) : (
                 products.map((p) => {
-                  const title = p.name || p.title || 'Untitled Book';
+                  const rawTitle = p.name || p.title || 'Untitled Book';
+                  const title = toTitleCase(rawTitle);
                   const mrp = p.old_price ? parseFloat(p.old_price) : 0;
                   const price = p.total_price ? parseFloat(p.total_price) : (p.price ? parseFloat(p.price) : 0);
                   const discount = p.discount ? parseFloat(p.discount) : 0;
@@ -770,11 +788,10 @@ export default function AdminProducts() {
                                 type="button"
                                 onClick={() => toggleFeatured(p)}
                                 title={p.is_featured ? "Click to remove from Homepage Featured" : "Click to mark as Homepage Featured"}
-                                className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold cursor-pointer transition-all ${
-                                  p.is_featured
+                                className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold cursor-pointer transition-all ${p.is_featured
                                     ? 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100 shadow-2xs'
                                     : 'bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-700 border border-slate-200 hover:border-amber-200'
-                                }`}
+                                  }`}
                               >
                                 <Sparkles className={`w-2.5 h-2.5 ${p.is_featured ? 'text-amber-600 fill-amber-500' : 'text-slate-400'}`} />
                                 <span>{p.is_featured ? 'Featured' : '+ Feature'}</span>
@@ -864,13 +881,12 @@ export default function AdminProducts() {
                       {/* Stock */}
                       <td className="py-3.5 px-4">
                         <span
-                          className={`font-bold px-2.5 py-1 rounded-lg text-[11px] inline-block ${
-                            stock > 20
+                          className={`font-bold px-2.5 py-1 rounded-lg text-[11px] inline-block ${stock > 20
                               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                               : stock > 0
-                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                              : 'bg-rose-50 text-rose-800 border border-rose-200'
-                          }`}
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'bg-rose-50 text-rose-800 border border-rose-200'
+                            }`}
                         >
                           {stock > 0 ? `${stock} in stock` : 'Out of Stock'}
                         </span>
@@ -895,11 +911,10 @@ export default function AdminProducts() {
                       {/* Status */}
                       <td className="py-3.5 px-4">
                         <span
-                          className={`font-bold text-[10px] uppercase px-2 py-0.5 rounded-full ${
-                            p.is_active !== 0
+                          className={`font-bold text-[10px] uppercase px-2 py-0.5 rounded-full ${p.is_active !== 0
                               ? 'bg-emerald-100 text-emerald-800'
                               : 'bg-slate-100 text-slate-600'
-                          }`}
+                            }`}
                         >
                           {p.is_active !== 0 ? 'Active' : 'Draft'}
                         </span>
@@ -961,7 +976,7 @@ export default function AdminProducts() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto space-y-5 animate-in zoom-in-95 duration-200 font-sans">
-            
+
             {/* Modal Header */}
             <div className="flex justify-between items-center pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
@@ -987,7 +1002,7 @@ export default function AdminProducts() {
 
             {/* Modal Form */}
             <form onSubmit={handleSave} className="space-y-5 text-xs">
-              
+
               {/* SECTION 1: BASIC INFORMATION */}
               <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-3.5">
                 <h4 className="font-extrabold uppercase text-[11px] text-slate-500 tracking-wider flex items-center gap-1.5">
@@ -1063,11 +1078,10 @@ export default function AdminProducts() {
                           type="button"
                           key={cat.id}
                           onClick={() => toggleCategory(cat.id)}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                            isSelected
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${isSelected
                               ? 'bg-red-600 text-white shadow-2xs'
                               : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                          }`}
+                            }`}
                         >
                           {cat.name} {isSelected ? '✓' : ''}
                         </button>
@@ -1310,8 +1324,8 @@ export default function AdminProducts() {
                   {saving
                     ? 'Saving Book...'
                     : editingProduct
-                    ? 'Update Book Details'
-                    : 'Create Book & Publish'}
+                      ? 'Update Book Details'
+                      : 'Create Book & Publish'}
                 </button>
               </div>
 

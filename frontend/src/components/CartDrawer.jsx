@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore.js';
 import { getImageUrl } from '../services/api.js';
+import toTitleCase from '../utils/titleCase.js';
 
 export default function CartDrawer() {
   const navigate = useNavigate();
@@ -146,7 +147,7 @@ export default function CartDrawer() {
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-start justify-between gap-2">
                     <h4 className="text-xs sm:text-[13px] font-medium text-slate-800 line-clamp-2 leading-snug">
-                      {item.name}
+                      {toTitleCase(item.name)}
                     </h4>
                     <button
                       onClick={() => removeItem(item.id)}

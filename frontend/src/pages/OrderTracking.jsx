@@ -23,6 +23,7 @@ import {
   MessageCircle
 } from 'lucide-react';
 import api, { getImageUrl, getInvoiceUrl } from '../services/api.js';
+import toTitleCase from '../utils/titleCase.js';
 
 export default function OrderTracking() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -210,10 +211,10 @@ export default function OrderTracking() {
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-400">
               <span className="text-[11px] font-semibold">Try sample order:</span>
               <button
-                onClick={() => handleQuickDemo('6303130025')}
+                onClick={() => handleQuickDemo('09177110134')}
                 className="px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-slate-200 text-[11px] font-mono transition-colors cursor-pointer"
               >
-                📱 6303130025
+                📱 09177110134
               </button>
               <button
                 onClick={() => handleQuickDemo('ORD2026118980')}
@@ -459,7 +460,7 @@ export default function OrderTracking() {
                                 </div>
                                 <div className="min-w-0">
                                   <h4 className="text-xs sm:text-sm font-medium text-slate-800 truncate">
-                                    {itemName}
+                                    {toTitleCase(itemName)}
                                   </h4>
                                   <p className="text-xs text-slate-500 font-mono">
                                     Qty: {itemQty} &times; ₹{itemPrice.toFixed(2)}
@@ -681,7 +682,7 @@ export default function OrderTracking() {
                 {selectedOrder.items?.map((item, idx) => (
                   <div key={idx} className="py-2.5 flex justify-between items-center text-xs sm:text-sm">
                     <div>
-                      <p className="font-medium text-slate-800">{item.book_title || item.name || 'Book'}</p>
+                      <p className="font-medium text-slate-800">{toTitleCase(item.book_title || item.name || 'Book')}</p>
                       <p className="text-xs text-slate-500 font-mono">Qty: {item.quantity} &times; ₹{item.price.toFixed(2)}</p>
                     </div>
                     <span className="font-extrabold text-slate-900">₹{(item.quantity * item.price).toFixed(2)}</span>

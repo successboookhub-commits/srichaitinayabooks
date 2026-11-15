@@ -93,12 +93,12 @@ export default function Navbar() {
   // Lock body scroll when mobile menu or search modal is open
   useEffect(() => {
     if (isMobileMenuOpen || isSearchModalOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflowY = 'hidden';
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflowY = '';
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflowY = '';
     };
   }, [isMobileMenuOpen, isSearchModalOpen]);
 
@@ -686,7 +686,7 @@ export default function Navbar() {
 
       {/* ================= STICKY MOBILE BOTTOM NAV ================= */}
       {!location.pathname.startsWith('/admin') && location.pathname !== '/checkout' && (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] flex items-center justify-around h-14">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] flex items-center justify-around h-[calc(3.5rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)]">
           {/* 1. Home */}
           <Link
             to="/"

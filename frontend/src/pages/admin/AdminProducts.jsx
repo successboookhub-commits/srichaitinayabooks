@@ -271,7 +271,9 @@ export default function AdminProducts() {
       quantity: product.quantity !== undefined ? product.quantity : (product.stock || 50),
       weight_type: isWeightless ? 'weightless' : 'weight',
       weight: weightVal,
-      shipping_charge: product.shipping_charge ? String(product.shipping_charge) : handleShippingCalc(weightVal, isWeightless ? 'weightless' : 'weight'),
+      shipping_charge: (product.shipping_charge !== undefined && product.shipping_charge !== null && product.shipping_charge !== '')
+        ? String(product.shipping_charge)
+        : handleShippingCalc(weightVal, isWeightless ? 'weightless' : 'weight'),
       description: product.description || '',
       is_featured: Boolean(product.is_featured),
       is_active: product.is_active !== undefined ? Boolean(product.is_active) : true,
@@ -344,7 +346,7 @@ export default function AdminProducts() {
       }
 
       if (editingProduct) {
-        await api.put(`/products/${editingProduct.id}`, formData, {
+        await api.post(`/products/${editingProduct.id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         // Cache cost locally for profits reporting
@@ -849,13 +851,13 @@ export default function AdminProducts() {
                       <td className="py-3.5 px-4 text-slate-600">
                         {p.is_weightless ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-full">
-                            <Feather className="w-3 h-3" /> Weight Less (₹{parseFloat(p.shipping_charge || 40).toFixed(0)})
+                            <Feather className="w-3 h-3" /> Weight Less (₹{parseFloat(p.shipping_charge !== undefined && p.shipping_charge !== null && p.shipping_charge !== '' ? p.shipping_charge : 40).toFixed(0)})
                           </span>
                         ) : (
                           <div>
                             <span className="font-bold font-mono">{p.weight || '0.50'} KG</span>
                             <p className="text-[10px] text-slate-400 font-medium">
-                              Ship: ₹{parseFloat(p.shipping_charge || 35).toFixed(2)}
+                              Ship: ₹{parseFloat(p.shipping_charge !== undefined && p.shipping_charge !== null && p.shipping_charge !== '' ? p.shipping_charge : 35).toFixed(2)}
                             </p>
                           </div>
                         )}

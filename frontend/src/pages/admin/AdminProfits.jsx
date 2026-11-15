@@ -334,7 +334,7 @@ export default function AdminProfits() {
         const formData = new FormData();
         formData.append('purchase_amount', String(newCost));
         formData.append('purchase_price', String(newCost));
-        await api.put(`/products/${editingBookCost.product_id}`, formData);
+        await api.post(`/products/${editingBookCost.product_id}`, formData);
       } catch (apiErr) {
         console.warn('Backend product cost update notice:', apiErr);
       }

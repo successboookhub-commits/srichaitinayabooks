@@ -27,6 +27,41 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $rawInput = file_get_contents('php://input');
 $body = json_decode($rawInput, true) ?: [];
 
+// Support multipart/form-data for PUT/PATCH requests when $_POST is empty
+if (($method === 'PUT' || $method === 'PATCH') && empty($_POST)) {
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+    if (stripos($contentType, 'multipart/form-data') !== false && preg_match('/boundary=(.*)$/i', $contentType, $matches)) {
+        $boundary = trim($matches[1], '"\'');
+        $parts = array_slice(explode('--' . $boundary, $rawInput), 1, -1);
+        foreach ($parts as $part) {
+            $part = ltrim($part, "\r\n");
+            $pos = strpos($part, "\r\n\r\n");
+            if ($pos !== false) {
+                $rawHeaders = substr($part, 0, $pos);
+                $content = substr($part, $pos + 4);
+                $content = substr($content, 0, -2); // remove trailing \r\n
+                if (preg_match('/name="([^"]+)"(?:;\s*filename="([^"]+)")?/i', $rawHeaders, $headerMatches)) {
+                    $fieldName = $headerMatches[1];
+                    if (isset($headerMatches[2])) {
+                        $filename = $headerMatches[2];
+                        $tmpPath = tempnam(sys_get_temp_dir(), 'php_put_upload_');
+                        file_put_contents($tmpPath, $content);
+                        $_FILES[$fieldName] = [
+                            'name'     => $filename,
+                            'type'     => 'application/octet-stream',
+                            'tmp_name' => $tmpPath,
+                            'error'    => UPLOAD_ERR_OK,
+                            'size'     => strlen($content),
+                        ];
+                    } else {
+                        $_POST[$fieldName] = $content;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Helper to normalize product record for frontend
 function formatProduct($p) {
     $categoryIds = [];
@@ -872,7 +907,13 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         $weightType = $_POST['weight_type'] ?? $body['weight_type'] ?? 'weight';
         $isWeightless = ($weightType === 'weightless' || !empty($_POST['is_weightless']) || !empty($body['is_weightless'])) ? 1 : 0;
         $weight = floatval($_POST['weight'] ?? $body['weight'] ?? 0.5);
-        $shippingCharge = floatval($_POST['shipping_charge'] ?? $body['shipping_charge'] ?? ($isWeightless ? 40 : ($weight * 70)));
+        if (isset($_POST['shipping_charge']) && $_POST['shipping_charge'] !== '') {
+            $shippingCharge = floatval($_POST['shipping_charge']);
+        } elseif (isset($body['shipping_charge']) && $body['shipping_charge'] !== '') {
+            $shippingCharge = floatval($body['shipping_charge']);
+        } else {
+            $shippingCharge = $isWeightless ? 40.0 : ($weight * 70.0);
+        }
         $isFeatured = isset($_POST['is_featured']) ? intval($_POST['is_featured']) : (isset($body['is_featured']) ? intval($body['is_featured']) : 0);
         $isActive = isset($_POST['is_active']) ? intval($_POST['is_active']) : (isset($body['is_active']) ? intval($body['is_active']) : 1);
 
@@ -909,28 +950,86 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
 if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
     $id = intval($m[2]);
     if ($method === 'PUT' || $method === 'POST') {
-        $name = trim($_POST['name'] ?? $body['name'] ?? '');
-        $price = floatval($_POST['price'] ?? $_POST['total_price'] ?? $body['price'] ?? $body['total_price'] ?? 0);
-        $purchaseAmount = floatval($_POST['purchase_amount'] ?? $_POST['purchase_price'] ?? $body['purchase_amount'] ?? $body['purchase_price'] ?? 0);
-        $oldPrice = floatval($_POST['old_price'] ?? $body['old_price'] ?? 0);
-        $discount = floatval($_POST['discount'] ?? $body['discount'] ?? 0);
-        $stock = intval($_POST['stock'] ?? $_POST['quantity'] ?? $body['stock'] ?? $body['quantity'] ?? 10);
-        $publicationId = intval($_POST['publication_id'] ?? $body['publication_id'] ?? 0) ?: null;
+        $currStmt = $pdo->prepare('SELECT * FROM products WHERE id = ? LIMIT 1');
+        $currStmt->execute([$id]);
+        $current = $currStmt->fetch();
+        if (!$current) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Product not found.']);
+            exit;
+        }
 
-        $catInput = $_POST['category_ids'] ?? $body['category_ids'] ?? [];
+        $name = isset($_POST['name']) && trim($_POST['name']) !== '' ? trim($_POST['name']) : (isset($body['name']) && trim($body['name']) !== '' ? trim($body['name']) : ($current['name'] ?? ''));
+
+        $price = isset($_POST['total_price']) && $_POST['total_price'] !== '' ? floatval($_POST['total_price']) :
+                 (isset($_POST['price']) && $_POST['price'] !== '' ? floatval($_POST['price']) :
+                 (isset($body['total_price']) && $body['total_price'] !== '' ? floatval($body['total_price']) :
+                 (isset($body['price']) && $body['price'] !== '' ? floatval($body['price']) : floatval($current['total_price'] ?? 0))));
+
+        $purchaseAmount = isset($_POST['purchase_amount']) && $_POST['purchase_amount'] !== '' ? floatval($_POST['purchase_amount']) :
+                          (isset($_POST['purchase_price']) && $_POST['purchase_price'] !== '' ? floatval($_POST['purchase_price']) :
+                          (isset($body['purchase_amount']) && $body['purchase_amount'] !== '' ? floatval($body['purchase_amount']) :
+                          (isset($body['purchase_price']) && $body['purchase_price'] !== '' ? floatval($body['purchase_price']) : floatval($current['purchase_amount'] ?? $current['purchase_price'] ?? 0))));
+
+        $oldPrice = isset($_POST['old_price']) && $_POST['old_price'] !== '' ? floatval($_POST['old_price']) :
+                    (isset($body['old_price']) && $body['old_price'] !== '' ? floatval($body['old_price']) : floatval($current['old_price'] ?? $price));
+
+        $discount = isset($_POST['discount']) && $_POST['discount'] !== '' ? floatval($_POST['discount']) :
+                    (isset($body['discount']) && $body['discount'] !== '' ? floatval($body['discount']) : floatval($current['discount'] ?? 0));
+
+        $stock = isset($_POST['quantity']) && $_POST['quantity'] !== '' ? intval($_POST['quantity']) :
+                 (isset($_POST['stock']) && $_POST['stock'] !== '' ? intval($_POST['stock']) :
+                 (isset($body['quantity']) && $body['quantity'] !== '' ? intval($body['quantity']) :
+                 (isset($body['stock']) && $body['stock'] !== '' ? intval($body['stock']) : intval($current['quantity'] ?? 10))));
+
+        $publicationId = isset($_POST['publication_id']) && $_POST['publication_id'] !== '' ? intval($_POST['publication_id']) :
+                         (isset($body['publication_id']) && $body['publication_id'] !== '' ? intval($body['publication_id']) : (!empty($current['publication_id']) ? intval($current['publication_id']) : null));
+
+        if (isset($_POST['category_ids'])) {
+            $catInput = $_POST['category_ids'];
+        } elseif (isset($body['category_ids'])) {
+            $catInput = $body['category_ids'];
+        } else {
+            $catInput = $current['category_ids'] ?? [];
+        }
         if (is_string($catInput)) {
             $dec = json_decode($catInput, true);
             $catInput = is_array($dec) ? $dec : preg_split('/[\s,]+/', $catInput, -1, PREG_SPLIT_NO_EMPTY);
         }
         $categoryIds = json_encode(array_values(array_map('intval', (array)$catInput)));
 
-        $description = $_POST['description'] ?? $body['description'] ?? '';
-        $weightType = $_POST['weight_type'] ?? $body['weight_type'] ?? 'weight';
-        $isWeightless = ($weightType === 'weightless' || !empty($_POST['is_weightless']) || !empty($body['is_weightless'])) ? 1 : 0;
-        $weight = floatval($_POST['weight'] ?? $body['weight'] ?? 0.5);
-        $shippingCharge = floatval($_POST['shipping_charge'] ?? $body['shipping_charge'] ?? ($isWeightless ? 40 : ($weight * 70)));
-        $isFeatured = isset($_POST['is_featured']) ? intval($_POST['is_featured']) : (isset($body['is_featured']) ? intval($body['is_featured']) : 0);
-        $isActive = isset($_POST['is_active']) ? intval($_POST['is_active']) : (isset($body['is_active']) ? intval($body['is_active']) : 1);
+        $description = isset($_POST['description']) ? (string)$_POST['description'] : (isset($body['description']) ? (string)$body['description'] : (string)($current['description'] ?? ''));
+
+        if (isset($_POST['weight_type'])) {
+            $isWeightless = ($_POST['weight_type'] === 'weightless') ? 1 : 0;
+        } elseif (isset($_POST['is_weightless'])) {
+            $isWeightless = !empty($_POST['is_weightless']) ? 1 : 0;
+        } elseif (isset($body['weight_type'])) {
+            $isWeightless = ($body['weight_type'] === 'weightless') ? 1 : 0;
+        } elseif (isset($body['is_weightless'])) {
+            $isWeightless = !empty($body['is_weightless']) ? 1 : 0;
+        } else {
+            $isWeightless = !empty($current['is_weightless']) ? 1 : 0;
+        }
+
+        $weight = isset($_POST['weight']) && $_POST['weight'] !== '' ? floatval($_POST['weight']) :
+                  (isset($body['weight']) && $body['weight'] !== '' ? floatval($body['weight']) : floatval($current['weight'] ?? 0.5));
+
+        if (isset($_POST['shipping_charge']) && $_POST['shipping_charge'] !== '') {
+            $shippingCharge = floatval($_POST['shipping_charge']);
+        } elseif (isset($body['shipping_charge']) && $body['shipping_charge'] !== '') {
+            $shippingCharge = floatval($body['shipping_charge']);
+        } elseif (isset($current['shipping_charge']) && $current['shipping_charge'] !== null && $current['shipping_charge'] !== '') {
+            $shippingCharge = floatval($current['shipping_charge']);
+        } else {
+            $shippingCharge = $isWeightless ? 40.0 : ($weight * 70.0);
+        }
+
+        $isFeatured = isset($_POST['is_featured']) ? intval($_POST['is_featured']) :
+                      (isset($body['is_featured']) ? intval($body['is_featured']) : intval($current['is_featured'] ?? 0));
+
+        $isActive = isset($_POST['is_active']) ? intval($_POST['is_active']) :
+                    (isset($body['is_active']) ? intval($body['is_active']) : intval($current['is_active'] ?? 1));
 
         $imagePath = '';
         if (!empty($_FILES['main_photo']['name']) || !empty($_FILES['image']['name'])) {

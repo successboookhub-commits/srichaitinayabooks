@@ -42,7 +42,12 @@ export default function BannerSlider({ banners = [] }) {
     <div className="relative w-full overflow-hidden rounded-2xl md:rounded-3xl shadow-lg bg-gray-900 group">
       <div
         className="flex transition-transform duration-700 ease-out"
-        style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+        style={{
+          transform: `translate3d(-${currentIndex * 100}%, 0, 0)`,
+          WebkitBackfaceVisibility: 'hidden',
+          backfaceVisibility: 'hidden',
+          touchAction: 'pan-y'
+        }}
       >
         {slides.map((b, idx) => {
           const fallbackImage = DEFAULT_BANNERS[idx % DEFAULT_BANNERS.length].image;

@@ -6,19 +6,67 @@
   }
 }
 
-/* Prevent iOS Safari from auto-zooming on input focus (< 16px causes iOS auto-zoom) */
+/* Strict iOS Safari & Mobile Viewport Movement Lock */
+html {
+  overflow-x: hidden !important;
+  width: 100%;
+  max-width: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior-x: none;
+}
+
+body {
+  overflow-x: hidden !important;
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y pinch-zoom;
+}
+
+#root {
+  overflow-x: hidden !important;
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Contain all horizontal scroll rows (Categories, Pills, Filter Chips) so they never shake or drag the body on iOS */
+.overflow-x-auto,
+[class*="overflow-x-auto"],
+.overflow-x-scroll,
+[class*="overflow-x-scroll"] {
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-x: contain !important;
+  overscroll-behavior-y: auto !important;
+  touch-action: pan-x pan-y !important;
+}
+
+/* Prevent iOS Safari from auto-zooming on input focus (< 16px causes iOS auto-zoom and screen shift) */
 @media screen and (max-width: 768px) {
   input,
   select,
-  textarea {
+  textarea,
+  button {
     font-size: 16px !important;
   }
 }
 
-/* Ensure smooth mobile scrolling and no horizontal overflow */
-html, body {
-  overflow-x: hidden;
-  -webkit-text-size-adjust: 100%;
+/* Disable 300ms double-tap zoom lag and accidental viewport zoom */
+button, a, input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* iOS Safe Area bottom padding utility */
+.safe-area-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
 /* Custom scrollbars */
@@ -49,4 +97,3 @@ html, body {
     display: block !important;
   }
 }
-

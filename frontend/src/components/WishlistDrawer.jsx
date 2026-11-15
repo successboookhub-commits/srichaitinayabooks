@@ -21,12 +21,12 @@ export default function WishlistDrawer() {
   // Lock body scroll when drawer is open
   useEffect(() => {
     if (isWishlistOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflowY = 'hidden';
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflowY = '';
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflowY = '';
     };
   }, [isWishlistOpen]);
 
@@ -54,7 +54,7 @@ export default function WishlistDrawer() {
       />
 
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+        <div className="w-full max-w-md bg-white shadow-2xl flex flex-col">
           
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">

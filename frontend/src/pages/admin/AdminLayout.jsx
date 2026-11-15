@@ -277,7 +277,7 @@ export default function AdminLayout() {
   );
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex bg-slate-100 font-sans">
+    <div className="h-screen w-full max-w-full overflow-hidden flex bg-slate-100 font-sans">
       
       {/* 1. DESKTOP FIXED STICKY SIDEBAR (Never moves / scrolls away) */}
       <aside className="hidden md:flex w-64 bg-slate-900 text-slate-300 flex-col h-full shrink-0 border-r border-slate-800 z-30 select-none">

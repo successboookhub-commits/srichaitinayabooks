@@ -67,11 +67,11 @@ function CustomerLayout({ children }) {
   }, [location.pathname, location.search]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
+    <div className="flex flex-col min-h-screen bg-slate-50 w-full max-w-full overflow-x-hidden relative">
       <Navbar />
       <CartDrawer />
       <WishlistDrawer />
-      <main className="flex-1">
+      <main className="flex-1 w-full max-w-full overflow-x-hidden">
         <Suspense fallback={<PageLoadingFallback />}>
           {children}
         </Suspense>

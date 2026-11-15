@@ -140,10 +140,8 @@ class CheckoutController extends Controller
         try {
             $today = now();
 
-            // Collision-proof unique order code generator
-            do {
-                $orderCode = 'ORD' . $today->format('Ym') . str_pad(random_int(100, 9999), 4, '0', STR_PAD_LEFT);
-            } while (DB::table('orders')->where('order_code', $orderCode)->exists());
+            // Generate Sequential Daily Order Code (e.g. ORD20261115001, ORD20261115002...)
+            $orderCode = $this->generateDailyOrderCode();
 
             // Customer Deduplication: update or create based on mobile number
             $customer = Customer::firstOrNew(['phone' => trim($checkout['phone'])]);
@@ -277,9 +275,8 @@ class CheckoutController extends Controller
                     DB::beginTransaction();
                     try {
                         $today = now();
-                        do {
-                            $orderCode = 'ORD' . $today->format('Ym') . str_pad(random_int(100, 9999), 4, '0', STR_PAD_LEFT);
-                        } while (DB::table('orders')->where('order_code', $orderCode)->exists());
+                        // Generate Sequential Daily Order Code (e.g. ORD20261115001, ORD20261115002...)
+                        $orderCode = $this->generateDailyOrderCode();
 
                         $customer = Customer::firstOrNew(['phone' => trim($checkout['phone'])]);
                         $customer->name     = $checkout['name'];
@@ -401,5 +398,41 @@ class CheckoutController extends Controller
             public_path($relativePath),
             $orderCode . '.pdf'
         );
+    }
+
+    /**
+     * Generate Sequential Daily Order Code (e.g. ORD20261115001, ORD20261115002...)
+     * Resets to 001 every new day (YYYYMMDD) and cleanly rolls over across years.
+     */
+    private function generateDailyOrderCode(): string
+    {
+        $today = now()->timezone('Asia/Kolkata');
+        $datePrefix = 'ORD' . $today->format('Ymd');
+        $prefixLen = strlen($datePrefix);
+
+        $existing = DB::table('orders')
+            ->where('order_code', 'LIKE', $datePrefix . '%')
+            ->pluck('order_code');
+
+        $maxSeq = 0;
+        foreach ($existing as $code) {
+            $suffix = substr($code, $prefixLen);
+            if ($suffix !== false && strlen($suffix) >= 3 && ctype_digit($suffix)) {
+                $val = (int) $suffix;
+                if ($val > $maxSeq) {
+                    $maxSeq = $val;
+                }
+            }
+        }
+
+        $nextSeq = $maxSeq + 1;
+        $candidate = $datePrefix . str_pad($nextSeq, 3, '0', STR_PAD_LEFT);
+
+        while (DB::table('orders')->where('order_code', $candidate)->exists()) {
+            $nextSeq++;
+            $candidate = $datePrefix . str_pad($nextSeq, 3, '0', STR_PAD_LEFT);
+        }
+
+        return $candidate;
     }
 }

@@ -1,284 +1,433 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>Invoice</title>
-
+<meta charset="utf-8">
+<title>Invoice - {{ $order->order_code }}</title>
 <style>
-
-@page{
-    margin:25px;
-}
-
-body{
-    font-family: DejaVu Sans, sans-serif;
-    font-size:13px;
-    color:#333;
-}
-
-table{
-    width:100%;
-    border-collapse:collapse;
-}
-
-.header td{
-    vertical-align:top;
-}
-
-.company{
-    font-size:22px;
-    font-weight:bold;
-    color:#c62828;
-}
-
-.small{
-    font-size:12px;
-    color:#666;
-}
-
-.right{
-    text-align:right;
-}
-
-.invoice-title{
-    font-size:22px;
-    font-weight:bold;
-}
-
-.line{
-    border-top:1px solid #ddd;
-    margin:15px 0;
-}
-
-.items{
-    width:100%;
-    border-collapse:collapse;
-}
-
-.items th{
-    background:#f5f5f5;
-    border:1px solid #ddd;
-    padding:8px;
-    font-size:12px;
-}
-
-.items td{
-    border:1px solid #ddd;
-    padding:8px;
-    font-size:12px;
-}
-
-.num{
-    text-align:right;
-}
-
-.total-table{
-    width:300px;
-    margin-top:20px;
-    margin-left:auto;
-}
-
-.total-table td{
-    padding:8px;
-    border:1px solid #ddd;
-}
-
-.total{
-    background:#f5f5f5;
-    font-weight:bold;
-    font-size:15px;
-}
-
-.footer{
-    margin-top:40px;
-    text-align:center;
-    font-size:11px;
-    color:#666;
-}
-
-.status{
-    color:green;
-    font-weight:bold;
-}
-
+  @page {
+    size: A4 portrait;
+    margin: 12mm 15mm;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    font-family: DejaVu Sans, Arial, Helvetica, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    color: #000000;
+  }
+  .outer-card {
+    width: 100%;
+    border: 2px solid #000000;
+    background: #ffffff;
+  }
+  .inner-card {
+    border: 1px solid #000000;
+    margin: 2mm;
+  }
+  /* Section 1: Header */
+  .header-box {
+    border-bottom: 2px solid #000000;
+    background: #ffffff;
+    padding: 10px 14px;
+  }
+  .header-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .brand-title {
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: #000000;
+    margin: 0;
+    line-height: 1.1;
+  }
+  .brand-subtitle {
+    font-size: 8px;
+    font-weight: bold;
+    color: #334155;
+    margin-top: 4px;
+    letter-spacing: 0.3px;
+  }
+  .badge-box {
+    text-align: right;
+    vertical-align: middle;
+  }
+  .badge-pill {
+    display: inline-block;
+    border: 2px solid #000000;
+    background: #ffffff;
+    color: #000000;
+    font-size: 9.5px;
+    font-weight: 900;
+    padding: 3px 10px;
+    border-radius: 4px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  /* Section 2: Order Strip */
+  .order-strip {
+    border-bottom: 1px solid #000000;
+    background: #ffffff;
+    padding: 7px 14px;
+  }
+  .order-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .order-code-text {
+    font-family: monospace;
+    font-size: 13.5px;
+    font-weight: 900;
+    color: #000000;
+    letter-spacing: 0.5px;
+  }
+  .order-label {
+    font-size: 8.5px;
+    font-weight: bold;
+    color: #64748b;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+  .order-date-text {
+    text-align: right;
+    font-size: 9.5px;
+    font-weight: bold;
+    color: #334155;
+  }
+  /* Section 3: Deliver To */
+  .deliver-box {
+    border-bottom: 1px solid #000000;
+    background: #ffffff;
+    padding: 11px 14px;
+  }
+  .tag-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 3px;
+    margin-bottom: 6px;
+  }
+  .tag-title {
+    font-size: 9px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #475569;
+  }
+  .tag-badge {
+    text-align: right;
+    font-size: 7.5px;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #475569;
+  }
+  .tag-pill {
+    background: #f1f5f9;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .customer-title {
+    font-size: 14.5px;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #000000;
+    margin: 4px 0 2px 0;
+    line-height: 1.2;
+  }
+  .phone-strip {
+    font-size: 11.5px;
+    font-weight: bold;
+    color: #000000;
+    margin: 4px 0;
+  }
+  .tel-pill {
+    display: inline-block;
+    border: 1px solid #000000;
+    background: #ffffff;
+    color: #000000;
+    font-size: 8px;
+    font-weight: bold;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 5px;
+  }
+  .tel-num {
+    font-family: monospace;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+  }
+  .addr-line {
+    font-size: 11px;
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.35;
+    margin: 2px 0;
+  }
+  .pin-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 5px;
+    margin-top: 6px;
+  }
+  .pin-title {
+    font-size: 9.5px;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #334155;
+    letter-spacing: 0.5px;
+  }
+  .pin-code-num {
+    text-align: right;
+    font-family: monospace;
+    font-size: 13.5px;
+    font-weight: 900;
+    color: #000000;
+    letter-spacing: 2px;
+  }
+  /* Section 4: Return Info */
+  .return-box {
+    border-bottom: 1px solid #000000;
+    background: #f8fafc;
+    padding: 9px 14px;
+    font-size: 9px;
+    line-height: 1.35;
+  }
+  .return-top-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 3px;
+  }
+  .return-hdr {
+    font-size: 8px;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #475569;
+  }
+  .reg-pill {
+    text-align: right;
+    font-size: 8px;
+    font-weight: bold;
+    color: #1e293b;
+  }
+  .reg-inner {
+    background: #e2e8f0;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .store-name-text {
+    font-size: 10.5px;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #000000;
+    margin: 2px 0;
+  }
+  .store-addr-text {
+    font-size: 8.5px;
+    color: #1e293b;
+    margin: 2px 0;
+  }
+  .store-phone-text {
+    font-size: 9px;
+    font-weight: bold;
+    color: #000000;
+    margin-top: 3px;
+  }
+  /* Section 5: Manifest */
+  .manifest-box {
+    background: #ffffff;
+    padding: 10px 14px;
+  }
+  .manifest-hdr-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 4px;
+    margin-bottom: 6px;
+  }
+  .manifest-title {
+    font-size: 8.5px;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #334155;
+    letter-spacing: 0.5px;
+  }
+  .manifest-qty {
+    text-align: right;
+  }
+  .manifest-qty-badge {
+    font-family: monospace;
+    font-size: 8.5px;
+    font-weight: 900;
+    color: #000000;
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #cbd5e1;
+  }
+  .items-list-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .items-list-table td {
+    padding: 4px 0;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+  }
+  .item-title-td {
+    font-size: 9.5px;
+    font-weight: bold;
+    color: #000000;
+    padding-right: 8px;
+    line-height: 1.35;
+  }
+  .item-qty-td {
+    text-align: right;
+    vertical-align: top;
+    width: 35px;
+    font-family: monospace;
+    font-size: 9px;
+    font-weight: 900;
+    color: #000000;
+    white-space: nowrap;
+  }
 </style>
-
 </head>
-
 <body>
-
-<table class="header">
-
-<tr>
-
-<td width="60%">
-
-<div class="company">
-
-Sri Chaitanya Book Centre
-
-</div>
-
-<div class="small">
-
-Hyderabad, Telangana<br>
-
-India
-
-</div>
-
-</td>
-
-<td width="40%" class="right">
-
-<div class="invoice-title">
-
-INVOICE
-
-</div>
-
-<br>
-
-<b>Order No :</b>
-
-{{ $order->order_code }}
-
-<br><br>
-
-<b>Date :</b>
-
-{{ date('d-m-Y h:i A',strtotime($order->created_at)) }}
-
-<br><br>
-
-<b>Status :</b>
-
-<span class="status">
-
-{{ $order->status }}
-
-</span>
-
-</td>
-
-</tr>
-
-</table>
-
-<div class="line"></div>
-
-<h3>Order Items</h3>
-
-<table class="items">
-
-<tr>
-
-<th width="50%">Product</th>
-
-<th width="15%">Qty</th>
-
-<th width="15%">Price</th>
-
-<th width="20%">Total</th>
-
-</tr>
-
-@foreach($items as $item)
-
-<tr>
-
-<td>
-
-{{ $item->product_name }}
-
-</td>
-
-<td class="num">
-
-{{ $item->qty }}
-
-</td>
-
-<td class="num">
-
-₹ {{ number_format($item->price,2) }}
-
-</td>
-
-<td class="num">
-
-₹ {{ number_format($item->total,2) }}
-
-</td>
-
-</tr>
-
-@endforeach
-
-</table>
-
-<table class="total-table">
-
-<tr>
-
-<td>
-
-Subtotal
-
-</td>
-
-<td class="num">
-
-₹ {{ number_format($order->subtotal,2) }}
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-Shipping
-
-</td>
-
-<td class="num">
-
-₹ {{ number_format($order->shipping,2) }}
-
-</td>
-
-</tr>
-
-<tr class="total">
-
-<td>
-
-Grand Total
-
-</td>
-
-<td class="num">
-
-₹ {{ number_format($order->total,2) }}
-
-</td>
-
-</tr>
-
-</table>
-
-<div class="footer">
-
-<b>Thank You For Shopping With Sri Chaitanya Book Centre.</b>
-
-<br><br>
-
-This is a computer generated invoice.
-
-</div>
-
+  @php
+    $cust = $order->customer ?? null;
+    $custName = strtoupper($cust->name ?? ($order->customer_name ?? 'Customer'));
+    $custPhone = $cust->phone ?? ($order->customer_phone ?? '-');
+    $pincode = $cust->pincode ?? ($order->pincode ?? '-');
+    $badgeText = (($order->status ?? '') === 'Paid') ? 'PREPAID' : 'POSTAL PARCEL';
+    $bookingDate = !empty($order->created_at) ? date('d M Y', strtotime($order->created_at)) : date('d M Y');
+
+    $door = trim($cust->door_no ?? ($order->door_no ?? ''));
+    $addr = trim($cust->address ?? ($order->address ?? ''));
+    $mandal = trim($cust->mandal ?? ($order->mandal ?? ''));
+    $district = trim($cust->district ?? ($order->district ?? ''));
+    $state = trim($cust->state ?? ($order->state ?? 'Telangana / Andhra Pradesh'));
+
+    $line1 = implode(', ', array_filter([$door ? "D.No: {$door}" : '', $addr]));
+    $line2 = implode(', ', array_filter([$mandal, $district]));
+    $addressLines = array_filter([$line1, $line2, $state]);
+
+    $totalQty = 0;
+    foreach ($items as $it) {
+        $totalQty += (int) ($it->qty ?? ($it->quantity ?? 1));
+    }
+    $itemsCount = count($items) ?: 1;
+    $titleWord = ($itemsCount > 1) ? 'TITLES' : 'TITLE';
+  @endphp
+
+  <div class="outer-card">
+    <div class="inner-card">
+
+      <!-- 1. Header -->
+      <div class="header-box">
+        <table class="header-table">
+          <tr>
+            <td>
+              <div class="brand-title">SRI CHAITANYA BOOK CENTRE</div>
+              <div class="brand-subtitle">ESTD. 1986 | DILSUKHNAGAR, HYDERABAD &bull; COMPETITIVE EXAM BOOKS</div>
+            </td>
+            <td class="badge-box">
+              <span class="badge-pill">{{ $badgeText }}</span>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 2. Order ID Strip -->
+      <div class="order-strip">
+        <table class="order-table">
+          <tr>
+            <td>
+              <span class="order-label">ORDER NO:</span>
+              <span class="order-code-text">{{ $order->order_code ?? ('ORD' . $order->id) }}</span>
+            </td>
+            <td class="order-date-text">
+              Booking Date: {{ $bookingDate }}
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 3. Deliver To / Consignee -->
+      <div class="deliver-box">
+        <table class="tag-table">
+          <tr>
+            <td class="tag-title">DELIVER TO / SHIP TO:</td>
+            <td class="tag-badge"><span class="tag-pill">CONSIGNEE</span></td>
+          </tr>
+        </table>
+
+        <div class="customer-title">{{ $custName }}</div>
+
+        <div class="phone-strip">
+          <span class="tel-pill">TEL / MOB</span>
+          <span class="tel-num">{{ $custPhone }}</span>
+        </div>
+
+        @foreach ($addressLines as $al)
+          <div class="addr-line">{{ ucwords(strtolower($al)) }}</div>
+        @endforeach
+
+        <table class="pin-table">
+          <tr>
+            <td class="pin-title">PIN CODE:</td>
+            <td class="pin-code-num">{{ $pincode }}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 4. Dispatch From / Return Info -->
+      <div class="return-box">
+        <table class="return-top-table">
+          <tr>
+            <td class="return-hdr">RETURN IF UNDELIVERED TO (BOOK STORE):</td>
+            <td class="reg-pill"><span class="reg-inner">Postal Reg ID: 1879696070</span></td>
+          </tr>
+        </table>
+        <div class="store-name-text">SRI CHAITANYA BOOK CENTRE</div>
+        <div class="store-addr-text">Konark Theatre Lane, opp. ICICI ATM, Dilsukhnagar, Hyderabad, Telangana - 500060</div>
+        <div class="store-phone-text">Helpline / WhatsApp: 09177110134</div>
+      </div>
+
+      <!-- 5. Book Description Manifest -->
+      <div class="manifest-box">
+        <table class="manifest-hdr-table">
+          <tr>
+            <td class="manifest-title">BOOK DESCRIPTION ({{ $itemsCount }} {{ $titleWord }})</td>
+            <td class="manifest-qty"><span class="manifest-qty-badge">TOTAL QTY: {{ $totalQty }}</span></td>
+          </tr>
+        </table>
+        <table class="items-list-table">
+          @forelse ($items as $idx => $it)
+            @php
+              $rawTitle = $it->product_name ?? ($it->book_title ?? ($it->name ?? 'Competitive Examination Book'));
+              $cleanTitle = preg_replace('/\.{2,}$/', '', trim($rawTitle));
+              $qty = (int) ($it->qty ?? ($it->quantity ?? 1));
+            @endphp
+            <tr>
+              <td class="item-title-td">{{ $idx + 1 }}. {{ $cleanTitle }}</td>
+              <td class="item-qty-td">x{{ $qty }}</td>
+            </tr>
+          @empty
+            <tr>
+              <td class="item-title-td">1. Sri Chaitanya Competitive Examination Material</td>
+              <td class="item-qty-td">x1</td>
+            </tr>
+          @endforelse
+        </table>
+      </div>
+
+    </div>
+  </div>
 </body>
-
 </html>

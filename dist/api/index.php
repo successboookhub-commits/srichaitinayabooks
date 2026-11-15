@@ -1449,18 +1449,28 @@ if ($path === 'auth/profile' && $method === 'PUT') {
 // =============================================================
 // INVOICE & WHATSAPP NOTIFICATION ENGINE (BhashSMS)
 // =============================================================
+// =============================================================
+// INVOICE & WHATSAPP NOTIFICATION ENGINE (BhashSMS)
+// Uses Exact Same Dispatch Slip / Shipping Label Layout as Print
+// =============================================================
 function createNativeInvoicePdf($order, $items, $savePath) {
-    $orderCode = $order['order_code'] ?? 'ORD-000';
-    $orderDate = !empty($order['created_at']) ? date('d-M-Y', strtotime($order['created_at'])) : date('d-M-Y');
-    $custName = !empty($order['customer_name']) ? $order['customer_name'] : 'Customer';
-    $custPhone = !empty($order['customer_phone']) ? $order['customer_phone'] : '';
-    $status = !empty($order['status']) ? $order['status'] : 'Paid';
-    $totalAmount = number_format(floatval($order['total'] ?? 0), 2);
-    $shipping = number_format(floatval($order['shipping'] ?? 0), 2);
-    $addr = trim(implode(', ', array_filter([$order['door_no'] ?? '', $order['address'] ?? '', $order['mandal'] ?? '', $order['district'] ?? '', $order['state'] ?? '', $order['pincode'] ?? ''])));
-    if (strlen($addr) > 55) {
-        $addr = substr($addr, 0, 52) . '...';
-    }
+    $orderCode = $order['order_code'] ?? ('ORD' . ($order['id'] ?? '000'));
+    $orderDate = !empty($order['created_at']) ? date('d M Y', strtotime($order['created_at'])) : date('d M Y');
+    $custName = !empty($order['customer_name']) ? strtoupper($order['customer_name']) : 'CUSTOMER';
+    $custPhone = !empty($order['customer_phone']) ? $order['customer_phone'] : '-';
+    $pincode = !empty($order['pincode']) ? $order['pincode'] : '-';
+    $badgeText = (($order['status'] ?? '') === 'Paid') ? 'PREPAID' : 'POSTAL PARCEL';
+
+    $door = trim($order['door_no'] ?? '');
+    $addr = trim($order['address'] ?? '');
+    $mandal = trim($order['mandal'] ?? '');
+    $city = trim($order['city'] ?? '');
+    $district = trim($order['district'] ?? '');
+    $state = trim($order['state'] ?? 'Telangana / Andhra Pradesh');
+
+    $line1 = implode(', ', array_filter([$door ? "D.No: {$door}" : '', $addr]));
+    $line2 = implode(', ', array_filter([$mandal, ($city && $city !== $mandal) ? $city : '', $district]));
+    $addressLines = array_filter([$line1, $line2, $state]);
 
     $esc = function($s) {
         $s = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', (string)$s);
@@ -1472,68 +1482,102 @@ function createNativeInvoicePdf($order, $items, $savePath) {
     $sOrderDate = $esc($orderDate);
     $sCustName = $esc($custName);
     $sCustPhone = $esc($custPhone);
-    $sAddr = $esc($addr);
-    $sStatus = $esc($status);
-    $sTotal = $esc($totalAmount);
-    $sShipping = $esc($shipping);
+    $sPincode = $esc($pincode);
+    $sBadge = $esc($badgeText);
 
+    $totalQty = 0;
+    foreach ($items as $it) {
+        $totalQty += intval($it['qty'] ?? 1);
+    }
+    $itemsCount = count($items) ?: 1;
+    $titleWord = ($itemsCount > 1) ? 'TITLES' : 'TITLE';
+
+    // Start PDF Stream (A4 size: 595.28 x 841.89)
     $stream = "q\n";
-    // Header red background
-    $stream .= "0.84 0.17 0.21 rg\n";
-    $stream .= "40 760 515 45 re f\n";
-    // Header text in white
-    $stream .= "1 1 1 rg\n";
-    $stream .= "BT /F2 16 Tf 50 788 Td (SRI CHAITANYA BOOK CENTRE - TAX INVOICE) Tj ET\n";
-    $stream .= "BT /F1 9 Tf 50 770 Td (Konark Theatre Lane, Dilsukhnagar, Hyderabad | Helpline: +91 9177110134) Tj ET\n";
 
-    // Order & Customer Info
+    // Black stroke color for all borders
+    $stream .= "0 0 0 RG 1.5 w\n";
+    // Outer card border
+    $stream .= "45 70 505 730 re S\n";
+    // Inner border
+    $stream .= "0.75 w 48 73 499 724 re S\n";
+
+    // 1. Header Box
     $stream .= "0 0 0 rg\n";
-    $stream .= "BT /F2 10 Tf 50 735 Td (Order Number: ) Tj /F1 10 Tf ({$sOrderCode}) Tj ET\n";
-    $stream .= "BT /F2 10 Tf 50 720 Td (Order Date: ) Tj /F1 10 Tf ({$sOrderDate}) Tj ET\n";
-    $stream .= "BT /F2 10 Tf 50 705 Td (Payment Status: ) Tj /F1 10 Tf ({$sStatus}) Tj ET\n";
+    $stream .= "BT /F2 13 Tf 58 765 Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
+    $stream .= "BT /F2 7.5 Tf 58 752 Td (ESTD. 1986 | DILSUKHNAGAR, HYDERABAD - COMPETITIVE EXAM BOOKS) Tj ET\n";
+    // Prepaid badge on right
+    $stream .= "1 w 465 748 72 20 re S\n";
+    $stream .= "BT /F2 9.5 Tf 476 755 Td ({$sBadge}) Tj ET\n";
+    // Header divider
+    $stream .= "1.5 w 48 738 m 547 738 l S\n";
 
-    $stream .= "BT /F2 10 Tf 300 735 Td (Billed & Shipped To:) Tj ET\n";
-    $stream .= "BT /F1 9.5 Tf 300 720 Td ({$sCustName} | Phone: {$sCustPhone}) Tj ET\n";
-    $stream .= "BT /F1 8.5 Tf 300 705 Td ({$sAddr}) Tj ET\n";
+    // 2. Order ID Strip
+    $stream .= "BT /F2 8.5 Tf 58 722 Td (ORDER NO: ) Tj /F2 12 Tf ({$sOrderCode}) Tj ET\n";
+    $stream .= "BT /F2 9 Tf 410 722 Td (Booking Date: {$sOrderDate}) Tj ET\n";
+    // Order divider
+    $stream .= "1 w 48 710 m 547 710 l S\n";
 
-    // Table Header
-    $stream .= "0.92 0.93 0.95 rg\n";
-    $stream .= "40 670 515 20 re f\n";
-    $stream .= "0 0 0 rg\n";
-    $stream .= "BT /F2 9 Tf 50 676 Td (#) Tj 75 676 Td (Book Title / Description) Tj 380 676 Td (Qty) Tj 430 676 Td (Price) Tj 490 676 Td (Total) Tj ET\n";
+    // 3. Deliver To / Consignee
+    $stream .= "BT /F2 8.5 Tf 58 695 Td (DELIVER TO / SHIP TO:) Tj ET\n";
+    $stream .= "BT /F2 7.5 Tf 485 695 Td ([CONSIGNEE]) Tj ET\n";
+    $stream .= "0.5 w 58 689 m 537 689 l S\n";
 
-    // Table Items
-    $y = 650;
-    foreach ($items as $idx => $it) {
-        $num = $idx + 1;
-        $title = $esc(substr($it['product_name'] ?? 'Book', 0, 48));
-        $qty = intval($it['qty'] ?? 1);
-        $price = number_format(floatval($it['price'] ?? 0), 2);
-        $total = number_format(floatval($it['total'] ?? ($price * $qty)), 2);
+    $stream .= "BT /F2 12 Tf 58 672 Td ({$sCustName}) Tj ET\n";
+    $stream .= "BT /F2 8 Tf 58 656 Td (TEL / MOB: ) Tj /F2 10.5 Tf ({$sCustPhone}) Tj ET\n";
 
-        $stream .= "BT /F1 8.5 Tf 50 {$y} Td ({$num}) Tj 75 {$y} Td ({$title}) Tj 385 {$y} Td ({$qty}) Tj 430 {$y} Td (Rs.{$price}) Tj 490 {$y} Td (Rs.{$total}) Tj ET\n";
-        $y -= 18;
-        if ($y < 120) break;
+    $y = 640;
+    foreach ($addressLines as $al) {
+        $cleanLine = $esc(substr($al, 0, 75));
+        $stream .= "BT /F1 9 Tf 58 {$y} Td ({$cleanLine}) Tj ET\n";
+        $y -= 14;
     }
 
-    // Divider Line
-    $stream .= "0.8 0.8 0.8 RG 1 w\n";
-    $stream .= "40 " . ($y - 5) . " m 555 " . ($y - 5) . " l S\n";
+    $y -= 4;
+    $stream .= "0.5 w 58 {$y} m 537 {$y} l S\n";
+    $y -= 14;
+    $stream .= "BT /F2 9.5 Tf 58 {$y} Td (PIN CODE:) Tj ET\n";
+    $stream .= "BT /F2 13 Tf 475 {$y} Td ({$sPincode}) Tj ET\n";
 
-    // Totals Box
-    $yTot = $y - 25;
-    $stream .= "0 0 0 rg\n";
-    $stream .= "BT /F1 9.5 Tf 380 {$yTot} Td (Shipping Charge:) Tj 490 {$yTot} Td (Rs.{$sShipping}) Tj ET\n";
-    $yTot -= 18;
-    $stream .= "0.84 0.17 0.21 rg\n";
-    $stream .= "BT /F2 12 Tf 380 {$yTot} Td (Grand Total Paid:) Tj 490 {$yTot} Td (Rs.{$sTotal}) Tj ET\n";
+    $y -= 8;
+    $stream .= "1 w 48 {$y} m 547 {$y} l S\n";
 
-    // Footer
-    $stream .= "0.4 0.4 0.4 rg\n";
-    $stream .= "BT /F1 8.5 Tf 50 50 Td (Computer-generated tax invoice for competitive exam study materials.) Tj ET\n";
-    $stream .= "BT /F1 8.5 Tf 50 38 Td (Track your order online at: https://srichaitanybookscenter.com/track-order) Tj ET\n";
+    // 4. Return If Undelivered To
+    $y -= 14;
+    $stream .= "BT /F2 8 Tf 58 {$y} Td (RETURN IF UNDELIVERED TO (BOOK STORE):) Tj ET\n";
+    $stream .= "BT /F1 7.5 Tf 420 {$y} Td (Postal Reg ID: 1879696070) Tj ET\n";
+    $y -= 13;
+    $stream .= "BT /F2 10 Tf 58 {$y} Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
+    $y -= 11;
+    $stream .= "BT /F1 8.5 Tf 58 {$y} Td (Konark Theatre Lane, opp. ICICI ATM, Dilsukhnagar, Hyderabad, Telangana - 500060) Tj ET\n";
+    $y -= 11;
+    $stream .= "BT /F2 9 Tf 58 {$y} Td (Helpline / WhatsApp: 09177110134) Tj ET\n";
+
+    $y -= 8;
+    $stream .= "1 w 48 {$y} m 547 {$y} l S\n";
+
+    // 5. Book Description Manifest
+    $y -= 14;
+    $stream .= "BT /F2 8.5 Tf 58 {$y} Td (BOOK DESCRIPTION ({$itemsCount} {$titleWord})) Tj ET\n";
+    $stream .= "BT /F2 8 Tf 460 {$y} Td (TOTAL QTY: {$totalQty}) Tj ET\n";
+    $y -= 6;
+    $stream .= "0.5 w 58 {$y} m 537 {$y} l S\n";
+
+    $y -= 13;
+    foreach ($items as $idx => $it) {
+        $num = $idx + 1;
+        $rawTitle = $it['product_name'] ?? 'Competitive Examination Book';
+        $cleanTitle = preg_replace('/\.{2,}$/', '', trim($rawTitle));
+        $title = $esc(substr(formatBookTitleCase($cleanTitle), 0, 72));
+        $qty = intval($it['qty'] ?? 1);
+
+        $stream .= "BT /F2 8.5 Tf 58 {$y} Td ({$num}. {$title}) Tj ET\n";
+        $stream .= "BT /F2 8.5 Tf 518 {$y} Td (x{$qty}) Tj ET\n";
+        $y -= 14;
+        if ($y < 85) break;
+    }
+
     $stream .= "Q\n";
-
     $streamLen = strlen($stream);
 
     $objects = [];
@@ -1588,9 +1632,455 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
         $order = $ordStmt->fetch();
         if (!$order) return false;
 
-        $itemsStmt = $pdo->prepare('SELECT * FROM order_items WHERE order_id = ?');
+        $itemsStmt = $pdo->prepare('SELECT oi.*, COALESCE(p.name, oi.product_name) AS product_name, oi.qty FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?');
         $itemsStmt->execute([$order['id']]);
         $items = $itemsStmt->fetchAll();
+
+        $totalQty = 0;
+        foreach ($items as $it) {
+            $totalQty += intval($it['qty'] ?? 1);
+        }
+
+        // Format address lines identical to print label
+        $door = trim($order['door_no'] ?? '');
+        $addr = trim($order['address'] ?? '');
+        $mandal = trim($order['mandal'] ?? '');
+        $city = trim($order['city'] ?? '');
+        $district = trim($order['district'] ?? '');
+        $state = trim($order['state'] ?? 'Telangana / Andhra Pradesh');
+
+        $line1 = implode(', ', array_filter([$door ? "D.No: {$door}" : '', $addr]));
+        $line2 = implode(', ', array_filter([$mandal, ($city && $city !== $mandal) ? $city : '', $district]));
+        $addressLines = array_filter([$line1, $line2, $state]);
+
+        $orderCode = htmlspecialchars($order['order_code'] ?? ('ORD' . $order['id']));
+        $bookingDate = !empty($order['created_at']) ? date('d M Y', strtotime($order['created_at'])) : date('d M Y');
+        $custName = htmlspecialchars(strtoupper($order['customer_name'] ?? 'Customer'));
+        $custPhone = htmlspecialchars($order['customer_phone'] ?? '-');
+        $pincode = htmlspecialchars($order['pincode'] ?? '-');
+        $badgeText = (($order['status'] ?? '') === 'Paid') ? 'PREPAID' : 'POSTAL PARCEL';
+
+        $itemsHtml = '';
+        if (!empty($items)) {
+            foreach ($items as $idx => $it) {
+                $num = $idx + 1;
+                $rawTitle = $it['product_name'] ?? 'Competitive Examination Book';
+                $cleanTitle = preg_replace('/\.{2,}$/', '', trim($rawTitle));
+                $title = htmlspecialchars(formatBookTitleCase($cleanTitle));
+                $qty = intval($it['qty'] ?? 1);
+
+                $itemsHtml .= "
+                <tr>
+                    <td class='item-title-td'>{$num}. {$title}</td>
+                    <td class='item-qty-td'>x{$qty}</td>
+                </tr>";
+            }
+        } else {
+            $itemsHtml = "
+            <tr>
+                <td class='item-title-td'>1. Sri Chaitanya Competitive Examination Material</td>
+                <td class='item-qty-td'>x1</td>
+            </tr>";
+        }
+
+        $addrHtml = '';
+        foreach ($addressLines as $al) {
+            $addrHtml .= "<div class='addr-line'>" . htmlspecialchars(ucwords(strtolower($al))) . "</div>";
+        }
+
+        $itemsCount = count($items) ?: 1;
+        $titleWord = ($itemsCount > 1) ? 'TITLES' : 'TITLE';
+
+        $html = "
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset='utf-8'>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 12mm 15mm;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            font-family: Arial, Helvetica, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            color: #000000;
+          }
+          .outer-card {
+            width: 100%;
+            border: 2px solid #000000;
+            background: #ffffff;
+          }
+          .inner-card {
+            border: 1px solid #000000;
+            margin: 2mm;
+          }
+          /* Section 1: Header */
+          .header-box {
+            border-bottom: 2px solid #000000;
+            background: #ffffff;
+            padding: 10px 14px;
+          }
+          .header-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .brand-title {
+            font-size: 15px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #000000;
+            margin: 0;
+            line-height: 1.1;
+          }
+          .brand-subtitle {
+            font-size: 8px;
+            font-weight: bold;
+            color: #334155;
+            margin-top: 4px;
+            letter-spacing: 0.3px;
+          }
+          .badge-box {
+            text-align: right;
+            vertical-align: middle;
+          }
+          .badge-pill {
+            display: inline-block;
+            border: 2px solid #000000;
+            background: #ffffff;
+            color: #000000;
+            font-size: 9.5px;
+            font-weight: 900;
+            padding: 3px 10px;
+            border-radius: 4px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+          }
+          /* Section 2: Order Strip */
+          .order-strip {
+            border-bottom: 1px solid #000000;
+            background: #ffffff;
+            padding: 7px 14px;
+          }
+          .order-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .order-code-text {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13.5px;
+            font-weight: 900;
+            color: #000000;
+            letter-spacing: 0.5px;
+          }
+          .order-label {
+            font-size: 8.5px;
+            font-weight: bold;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-right: 4px;
+          }
+          .order-date-text {
+            text-align: right;
+            font-size: 9.5px;
+            font-weight: bold;
+            color: #334155;
+          }
+          /* Section 3: Deliver To */
+          .deliver-box {
+            border-bottom: 1px solid #000000;
+            background: #ffffff;
+            padding: 11px 14px;
+          }
+          .tag-table {
+            width: 100%;
+            border-collapse: collapse;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 3px;
+            margin-bottom: 6px;
+          }
+          .tag-title {
+            font-size: 9px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #475569;
+          }
+          .tag-badge {
+            text-align: right;
+            font-size: 7.5px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #475569;
+          }
+          .tag-pill {
+            background: #f1f5f9;
+            padding: 1px 6px;
+            border-radius: 3px;
+          }
+          .customer-title {
+            font-size: 14.5px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #000000;
+            margin: 4px 0 2px 0;
+            line-height: 1.2;
+          }
+          .phone-strip {
+            font-size: 11.5px;
+            font-weight: bold;
+            color: #000000;
+            margin: 4px 0;
+          }
+          .tel-pill {
+            display: inline-block;
+            border: 1px solid #000000;
+            background: #ffffff;
+            color: #000000;
+            font-size: 8px;
+            font-weight: bold;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-right: 5px;
+          }
+          .tel-num {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+          }
+          .addr-line {
+            font-size: 11px;
+            font-weight: 600;
+            color: #0f172a;
+            line-height: 1.35;
+            margin: 2px 0;
+          }
+          .pin-table {
+            width: 100%;
+            border-collapse: collapse;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 5px;
+            margin-top: 6px;
+          }
+          .pin-title {
+            font-size: 9.5px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #334155;
+            letter-spacing: 0.5px;
+          }
+          .pin-code-num {
+            text-align: right;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13.5px;
+            font-weight: 900;
+            color: #000000;
+            letter-spacing: 2px;
+          }
+          /* Section 4: Return Info */
+          .return-box {
+            border-bottom: 1px solid #000000;
+            background: #f8fafc;
+            padding: 9px 14px;
+            font-size: 9px;
+            line-height: 1.35;
+          }
+          .return-top-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 3px;
+          }
+          .return-hdr {
+            font-size: 8px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #475569;
+          }
+          .reg-pill {
+            text-align: right;
+            font-size: 8px;
+            font-weight: bold;
+            color: #1e293b;
+          }
+          .reg-inner {
+            background: #e2e8f0;
+            padding: 1px 5px;
+            border-radius: 3px;
+          }
+          .store-name-text {
+            font-size: 10.5px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #000000;
+            margin: 2px 0;
+          }
+          .store-addr-text {
+            font-size: 8.5px;
+            color: #1e293b;
+            margin: 2px 0;
+          }
+          .store-phone-text {
+            font-size: 9px;
+            font-weight: bold;
+            color: #000000;
+            margin-top: 3px;
+          }
+          /* Section 5: Manifest */
+          .manifest-box {
+            background: #ffffff;
+            padding: 10px 14px;
+          }
+          .manifest-hdr-table {
+            width: 100%;
+            border-collapse: collapse;
+            border-bottom: 1px solid #cbd5e1;
+            padding-bottom: 4px;
+            margin-bottom: 6px;
+          }
+          .manifest-title {
+            font-size: 8.5px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #334155;
+            letter-spacing: 0.5px;
+          }
+          .manifest-qty {
+            text-align: right;
+          }
+          .manifest-qty-badge {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 8.5px;
+            font-weight: 900;
+            color: #000000;
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #cbd5e1;
+          }
+          .items-list-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .items-list-table td {
+            padding: 4px 0;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: top;
+          }
+          .item-title-td {
+            font-size: 9.5px;
+            font-weight: bold;
+            color: #000000;
+            padding-right: 8px;
+            line-height: 1.35;
+          }
+          .item-qty-td {
+            text-align: right;
+            vertical-align: top;
+            width: 35px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 9px;
+            font-weight: 900;
+            color: #000000;
+            white-space: nowrap;
+          }
+        </style>
+        </head>
+        <body>
+          <div class='outer-card'>
+            <div class='inner-card'>
+
+              <!-- 1. Header -->
+              <div class='header-box'>
+                <table class='header-table'>
+                  <tr>
+                    <td>
+                      <div class='brand-title'>SRI CHAITANYA BOOK CENTRE</div>
+                      <div class='brand-subtitle'>ESTD. 1986 | DILSUKHNAGAR, HYDERABAD &bull; COMPETITIVE EXAM BOOKS</div>
+                    </td>
+                    <td class='badge-box'>
+                      <span class='badge-pill'>{$badgeText}</span>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- 2. Order ID Strip -->
+              <div class='order-strip'>
+                <table class='order-table'>
+                  <tr>
+                    <td>
+                      <span class='order-label'>ORDER NO:</span>
+                      <span class='order-code-text'>{$orderCode}</span>
+                    </td>
+                    <td class='order-date-text'>
+                      Booking Date: {$bookingDate}
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- 3. Deliver To / Consignee -->
+              <div class='deliver-box'>
+                <table class='tag-table'>
+                  <tr>
+                    <td class='tag-title'>DELIVER TO / SHIP TO:</td>
+                    <td class='tag-badge'><span class='tag-pill'>CONSIGNEE</span></td>
+                  </tr>
+                </table>
+
+                <div class='customer-title'>{$custName}</div>
+
+                <div class='phone-strip'>
+                  <span class='tel-pill'>TEL / MOB</span>
+                  <span class='tel-num'>{$custPhone}</span>
+                </div>
+
+                {$addrHtml}
+
+                <table class='pin-table'>
+                  <tr>
+                    <td class='pin-title'>PIN CODE:</td>
+                    <td class='pin-code-num'>{$pincode}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- 4. Dispatch From / Return Info -->
+              <div class='return-box'>
+                <table class='return-top-table'>
+                  <tr>
+                    <td class='return-hdr'>RETURN IF UNDELIVERED TO (BOOK STORE):</td>
+                    <td class='reg-pill'><span class='reg-inner'>Postal Reg ID: 1879696070</span></td>
+                  </tr>
+                </table>
+                <div class='store-name-text'>SRI CHAITANYA BOOK CENTRE</div>
+                <div class='store-addr-text'>Konark Theatre Lane, opp. ICICI ATM, Dilsukhnagar, Hyderabad, Telangana - 500060</div>
+                <div class='store-phone-text'>Helpline / WhatsApp: 09177110134</div>
+              </div>
+
+              <!-- 5. Book Description Manifest -->
+              <div class='manifest-box'>
+                <table class='manifest-hdr-table'>
+                  <tr>
+                    <td class='manifest-title'>BOOK DESCRIPTION ({$itemsCount} {$titleWord})</td>
+                    <td class='manifest-qty'><span class='manifest-qty-badge'>TOTAL QTY: {$totalQty}</span></td>
+                  </tr>
+                </table>
+                <table class='items-list-table'>
+                  {$itemsHtml}
+                </table>
+              </div>
+
+            </div>
+          </div>
+        </body>
+        </html>";
 
         $autoload = dirname(__DIR__, 2) . '/vendor/autoload.php';
         if (file_exists($autoload)) {
@@ -1602,110 +2092,13 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
             $options->set('isHtml5ParserEnabled', true);
             $options->set('isRemoteEnabled', true);
             $dompdf = new \Dompdf\Dompdf($options);
-
-            $itemsHtml = '';
-            foreach ($items as $idx => $it) {
-                $num = $idx + 1;
-                $pName = htmlspecialchars($it['product_name'] ?? 'Book');
-                $pQty = intval($it['qty'] ?? 1);
-                $pPrice = number_format(floatval($it['price'] ?? 0), 2);
-                $pTotal = number_format(floatval($it['total'] ?? ($pPrice * $pQty)), 2);
-                $itemsHtml .= "<tr><td>{$num}</td><td>{$pName}</td><td>{$pQty}</td><td>₹{$pPrice}</td><td>₹{$pTotal}</td></tr>";
-            }
-
-            $orderCode = htmlspecialchars($order['order_code']);
-            $orderDate = date('d-M-Y', strtotime($order['created_at']));
-            $custName = htmlspecialchars($order['customer_name'] ?? 'Valued Student');
-            $custPhone = htmlspecialchars($order['customer_phone'] ?? '');
-            $addr = htmlspecialchars(trim(implode(', ', array_filter([$order['door_no'], $order['address'], $order['mandal'], $order['district'], $order['state'], $order['pincode']]))));
-            $totalAmount = number_format(floatval($order['total']), 2);
-            $shipping = number_format(floatval($order['shipping'] ?? 0), 2);
-            $status = htmlspecialchars($order['status'] ?? 'Paid');
-
-            $html = "
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <meta charset='utf-8'>
-            <style>
-              body { font-family: sans-serif; margin: 20px; color: #1e293b; font-size: 11px; }
-              .header { text-align: center; border-bottom: 3px solid #d72c35; padding-bottom: 12px; margin-bottom: 15px; }
-              .logo { font-size: 22px; font-weight: 800; color: #d72c35; }
-              .subtitle { font-size: 10px; color: #64748b; margin-top: 2px; }
-              .badge { display: inline-block; background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 6px; }
-              .meta-table { width: 100%; font-size: 11px; margin-bottom: 15px; }
-              .meta-table td { padding: 4px 0; vertical-align: top; }
-              .table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-              .table th, .table td { border: 1px solid #e2e8f0; padding: 7px; text-align: left; font-size: 10.5px; }
-              .table th { background-color: #f8fafc; font-weight: bold; color: #334155; }
-              .totals-box { margin-top: 15px; width: 40%; margin-left: auto; font-size: 11px; }
-              .totals-box td { padding: 4px; }
-              .grand-total { font-size: 13px; font-weight: bold; color: #d72c35; border-top: 2px solid #e2e8f0; }
-              .footer { margin-top: 30px; font-size: 9.5px; color: #94a3b8; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 10px; }
-            </style>
-            </head>
-            <body>
-              <div class='header'>
-                <div class='logo'>SRI CHAITANYA BOOK CENTRE</div>
-                <div class='subtitle'>Opp. ICICI ATM, Konark Theatre Lane, Dilsukhnagar, Hyderabad, Telangana - 500060</div>
-                <div class='subtitle'>Helpline / WhatsApp: +91 9177110134 | Website: srichaitanybookscenter.com</div>
-                <div class='badge'>OFFICIAL GST TAX INVOICE / ORDER RECEIPT</div>
-              </div>
-
-              <table class='meta-table'>
-                <tr>
-                  <td style='width: 50%;'>
-                    <strong>Billed & Shipped To:</strong><br>
-                    <strong>{$custName}</strong><br>
-                    Phone: {$custPhone}<br>
-                    Address: {$addr}
-                  </td>
-                  <td style='width: 50%; text-align: right;'>
-                    <strong>Order Number:</strong> {$orderCode}<br>
-                    <strong>Order Date:</strong> {$orderDate}<br>
-                    <strong>Payment Status:</strong> {$status}<br>
-                    <strong>Dispatch:</strong> Express 24hr Courier
-                  </td>
-                </tr>
-              </table>
-
-              <table class='table'>
-                <thead>
-                  <tr>
-                    <th style='width: 5%;'>#</th>
-                    <th style='width: 55%;'>Book / Publication Description</th>
-                    <th style='width: 10%;'>Qty</th>
-                    <th style='width: 15%;'>Unit Price</th>
-                    <th style='width: 15%;'>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {$itemsHtml}
-                </tbody>
-              </table>
-
-              <table class='totals-box'>
-                <tr>
-                  <td>Shipping Charges:</td>
-                  <td style='text-align: right;'>₹{$shipping}</td>
-                </tr>
-                <tr class='grand-total'>
-                  <td>Total Paid:</td>
-                  <td style='text-align: right;'>₹{$totalAmount}</td>
-                </tr>
-              </table>
-
-              <div class='footer'>
-                This is a computer-generated tax invoice for competitive exam study materials.<br>
-                For order tracking, visit <strong>https://srichaitanybookscenter.com/track-order</strong>
-              </div>
-            </body>
-            </html>
-            ";
-
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
+            $dir = dirname($savePath);
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0755, true);
+            }
             file_put_contents($savePath, $dompdf->output());
             return true;
         }
@@ -1715,6 +2108,48 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
     } catch (\Throwable $e) {
         error_log('Invoice PDF generation failed: ' . $e->getMessage());
         return false;
+    }
+}
+
+// Generate Sequential Daily Order Code (e.g. ORD20261115001, ORD20261115002...)
+// Resets to 001 every new day (YYYYMMDD) and cleanly rolls over into 2027 and beyond
+function generateDailySequentialOrderCode($pdo) {
+    try {
+        date_default_timezone_set('Asia/Kolkata');
+    } catch (\Throwable $t) {}
+
+    $datePrefix = 'ORD' . date('Ymd'); // e.g. ORD20261115
+    $prefixLen = strlen($datePrefix);
+
+    // Query existing orders for today matching this prefix
+    $stmt = $pdo->prepare("SELECT order_code FROM orders WHERE order_code LIKE ? ORDER BY id DESC");
+    $stmt->execute([$datePrefix . '%']);
+    $existingCodes = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $maxSeq = 0;
+    foreach ($existingCodes as $code) {
+        $suffix = substr($code, $prefixLen);
+        // Only count 3+ digit suffix (001, 002, ...)
+        if ($suffix !== false && strlen($suffix) >= 3 && ctype_digit($suffix)) {
+            $val = intval($suffix);
+            if ($val > $maxSeq) {
+                $maxSeq = $val;
+            }
+        }
+    }
+
+    $nextSeq = $maxSeq + 1;
+    $orderCode = $datePrefix . str_pad($nextSeq, 3, '0', STR_PAD_LEFT);
+
+    // Ensure absolute uniqueness in database
+    $checkStmt = $pdo->prepare("SELECT id FROM orders WHERE order_code = ? LIMIT 1");
+    while (true) {
+        $checkStmt->execute([$orderCode]);
+        if (!$checkStmt->fetch()) {
+            return $orderCode;
+        }
+        $nextSeq++;
+        $orderCode = $datePrefix . str_pad($nextSeq, 3, '0', STR_PAD_LEFT);
     }
 }
 
@@ -1733,9 +2168,8 @@ function sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $tota
             @mkdir($invoiceDir, 0755, true);
         }
         $invoiceFile = $invoiceDir . '/' . $orderCode . '.pdf';
-        if (!file_exists($invoiceFile)) {
-            generateOrderInvoicePdf($pdo, $orderId, $invoiceFile);
-        }
+        // Always generate freshly with the updated print label dispatch format
+        generateOrderInvoicePdf($pdo, $orderId, $invoiceFile);
 
         $domain = rtrim(getEnvVal('APP_URL', 'https://srichaitanybookscenter.com'), '/');
         $invoiceUrl = $domain . '/api/invoices/' . $orderCode . '.pdf';
@@ -1788,8 +2222,9 @@ if (preg_match('#^(order-history/invoice|invoices)/([a-zA-Z0-9_-]+)(\.pdf)?$#i',
     }
     $invoiceFile = $invoiceDir . '/' . $orderCode . '.pdf';
 
-    // If PDF doesn't exist yet, generate it on-demand
-    if (!file_exists($invoiceFile)) {
+    // If PDF doesn't exist yet or if refresh requested, generate it on-demand
+    $refresh = !empty($_GET['refresh']) || !empty($_GET['reload']);
+    if (!file_exists($invoiceFile) || $refresh) {
         $stmt = $pdo->prepare('SELECT id FROM orders WHERE order_code = ? OR id = ? LIMIT 1');
         $stmt->execute([$orderCode, is_numeric($orderCode) ? intval($orderCode) : -1]);
         $ord = $stmt->fetch();
@@ -1941,23 +2376,8 @@ function createConfirmedOrder($pdo, array $orderData) {
             $customerId = $pdo->lastInsertId();
         }
 
-        // Generate Collision-Proof Order Code (e.g. ORD2026118492)
-        $ym = date('Ym');
-        $orderCode = '';
-        $isUnique = false;
-        $tries = 0;
-        while (!$isUnique && $tries < 10) {
-            $tries++;
-            $orderCode = 'ORD' . $ym . rand(1000, 9999);
-            $checkStmt = $pdo->prepare('SELECT id FROM orders WHERE order_code = ? LIMIT 1');
-            $checkStmt->execute([$orderCode]);
-            if (!$checkStmt->fetch()) {
-                $isUnique = true;
-            }
-        }
-        if (!$isUnique) {
-            $orderCode = 'ORD' . $ym . time();
-        }
+        // Generate Sequential Daily Order Code (e.g. ORD20261115001, ORD20261115002...)
+        $orderCode = generateDailySequentialOrderCode($pdo);
 
         // Insert Order into orders table (Always marked Paid & Ordered)
         $payIdToSave = $rzpPaymentId ?: ('PAY_' . uniqid());
@@ -2541,17 +2961,8 @@ if ($path === 'orders') {
                 $customerId = $pdo->lastInsertId();
             }
 
-            $ym = date('Ym');
-            $orderCode = '';
-            $isUnique = false;
-            while (!$isUnique) {
-                $orderCode = 'ORD' . $ym . rand(1000, 9999);
-                $checkStmt = $pdo->prepare('SELECT id FROM orders WHERE order_code = ? LIMIT 1');
-                $checkStmt->execute([$orderCode]);
-                if (!$checkStmt->fetch()) {
-                    $isUnique = true;
-                }
-            }
+            // Generate Sequential Daily Order Code (e.g. ORD20261115001, ORD20261115002...)
+            $orderCode = generateDailySequentialOrderCode($pdo);
 
             $paymentMethod = $body['payment_method'] ?? 'ONLINE';
             if (strtoupper($paymentMethod) === 'COD') {
@@ -2820,7 +3231,7 @@ if ($path === 'orders/labels' && $method === 'GET') {
     $orders = $stmt->fetchAll();
 
     foreach ($orders as &$ord) {
-        $itemStmt = $pdo->prepare('SELECT product_name, qty FROM order_items WHERE order_id = ?');
+        $itemStmt = $pdo->prepare('SELECT COALESCE(p.name, oi.product_name) AS product_name, oi.qty FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?');
         $itemStmt->execute([$ord['id']]);
         $ord['items'] = $itemStmt->fetchAll();
     }
@@ -2873,7 +3284,7 @@ if (preg_match('#^orders/(\d+)$#', $path, $m)) {
         $stmt->execute([$orderId]);
         $order = $stmt->fetch();
         if ($order) {
-            $itemStmt = $pdo->prepare('SELECT oi.*, oi.product_name AS name, oi.product_name AS book_title, oi.qty AS quantity, p.main_photo AS product_image, p.main_photo AS image FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?');
+            $itemStmt = $pdo->prepare('SELECT oi.*, COALESCE(p.name, oi.product_name) AS product_name, COALESCE(p.name, oi.product_name) AS name, COALESCE(p.name, oi.product_name) AS book_title, oi.qty AS quantity, p.main_photo AS product_image, p.main_photo AS image FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?');
             $itemStmt->execute([$order['id']]);
             $items = $itemStmt->fetchAll();
             $order['items'] = $items;

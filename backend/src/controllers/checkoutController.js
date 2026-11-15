@@ -174,16 +174,8 @@ export class CheckoutController {
         customerId = customerResult.insertId;
       }
 
-      // Generate Collision-Proof Order Code
-      const d = new Date();
-      const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
-      let orderCode;
-      let exists = true;
-      while (exists) {
-        orderCode = `ORD${ym}${Math.floor(1000 + Math.random() * 9000)}`;
-        const [check] = await conn.query('SELECT id FROM orders WHERE order_code = ? LIMIT 1', [orderCode]);
-        if (!check.length) exists = false;
-      }
+      // Generate Sequential Daily Order Code (e.g. ORD20261115001, ORD20261115002...)
+      const orderCode = await generateDailySequentialOrderCode(conn);
 
       // Insert Order
       const [orderResult] = await conn.query(
@@ -276,6 +268,45 @@ export class CheckoutController {
       console.error('Webhook error:', error);
       return res.status(500).json({ status: 'error' });
     }
+  }
+}
+
+// Generate Sequential Daily Order Code (e.g. ORD20261115001, ORD20261115002...)
+// Resets to 001 every new day (YYYYMMDD) in IST and rolls cleanly into 2027 and beyond
+async function generateDailySequentialOrderCode(conn) {
+  const d = new Date();
+  const istStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // 'YYYY-MM-DD'
+  const ymd = istStr.replace(/-/g, ''); // '20261115'
+  const datePrefix = `ORD${ymd}`;
+  const prefixLen = datePrefix.length;
+
+  const [existing] = await conn.query(
+    'SELECT order_code FROM orders WHERE order_code LIKE ? ORDER BY id DESC',
+    [`${datePrefix}%`]
+  );
+
+  let maxSeq = 0;
+  for (const row of existing) {
+    const code = row.order_code || '';
+    const suffix = code.substring(prefixLen);
+    if (suffix.length >= 3 && /^\d+$/.test(suffix)) {
+      const val = parseInt(suffix, 10);
+      if (val > maxSeq) {
+        maxSeq = val;
+      }
+    }
+  }
+
+  let nextSeq = maxSeq + 1;
+  let candidate = `${datePrefix}${String(nextSeq).padStart(3, '0')}`;
+
+  while (true) {
+    const [check] = await conn.query('SELECT id FROM orders WHERE order_code = ? LIMIT 1', [candidate]);
+    if (!check.length) {
+      return candidate;
+    }
+    nextSeq++;
+    candidate = `${datePrefix}${String(nextSeq).padStart(3, '0')}`;
   }
 }
 

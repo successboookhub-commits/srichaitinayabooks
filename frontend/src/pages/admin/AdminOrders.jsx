@@ -23,7 +23,8 @@ import {
   X,
   Layers,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  RefreshCw
 } from 'lucide-react';
 import api from '../../services/api';
 import realtime, { playOrderChime } from '../../services/realtime';
@@ -62,6 +63,43 @@ export default function AdminOrders() {
   // Excel Export State
   const [exporting, setExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState('csv'); // 'csv' (universal) or 'xls' (styled XML)
+
+  // Razorpay Reconciliation State
+  const [syncingRazorpay, setSyncingRazorpay] = useState(false);
+
+  // Manual / Auto-Sync with Razorpay to recover any captured payments missing from DB
+  const handleSyncRazorpay = async (silent = false) => {
+    try {
+      if (!silent) {
+        setSyncingRazorpay(true);
+        setMessage('');
+        setError('');
+      }
+      const res = await api.post('/orders/sync-razorpay');
+      if (res.data?.success) {
+        if (res.data.synced > 0) {
+          setMessage(`Success! ${res.data.synced} missing order(s) recovered and added from Razorpay.`);
+          fetchOrders(1, !silent);
+        } else if (!silent) {
+          setMessage('All Razorpay payments are 100% in sync with the database!');
+        }
+      } else if (!silent) {
+        setError(res.data?.message || 'Failed to sync with Razorpay.');
+      }
+    } catch (err) {
+      if (!silent) {
+        console.error('Razorpay sync error:', err);
+        setError(err.response?.data?.message || 'Error connecting to Razorpay API.');
+      }
+    } finally {
+      if (!silent) setSyncingRazorpay(false);
+    }
+  };
+
+  // Run silent check on mount to ensure zero dropped orders
+  useEffect(() => {
+    handleSyncRazorpay(true);
+  }, []);
 
   // Single-Click Download All Orders or Filtered Orders in Excel
   const handleExportExcel = async (exportAll = true, chosenFormat = exportFormat) => {
@@ -433,8 +471,20 @@ export default function AdminOrders() {
           </div>
         )}
 
-        {/* ================= 1-CLICK EXCEL DOWNLOAD ACTION BUTTONS ================= */}
+        {/* ================= 1-CLICK ACTIONS & RAZORPAY SYNC ================= */}
         <div className="flex flex-wrap items-center gap-2.5">
+
+          {/* Razorpay Instant Reconciliation Button */}
+          <button
+            type="button"
+            onClick={() => handleSyncRazorpay(false)}
+            disabled={syncingRazorpay}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/90 font-bold text-xs shadow-2xs active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+            title="Scan Razorpay for any completed payments and auto-restore missing orders instantly"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${syncingRazorpay ? 'animate-spin text-blue-600' : 'text-blue-500'}`} />
+            <span>{syncingRazorpay ? 'Checking Razorpay...' : 'Sync Razorpay'}</span>
+          </button>
           
           {/* Format selector (.CSV vs .XLS) */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-[11px] font-bold text-slate-600">

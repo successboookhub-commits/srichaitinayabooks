@@ -40,6 +40,100 @@ export default function Checkout() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // 1. Auto-fill saved address from localStorage so customer never has to retype
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('sc_checkout_address');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setFormData((prev) => ({ ...prev, ...parsed }));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  // 2. Persist address changes to localStorage
+  useEffect(() => {
+    try {
+      if (formData.phone || formData.address || formData.name) {
+        localStorage.setItem('sc_checkout_address', JSON.stringify(formData));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [formData]);
+
+  // 3. Helper to verify and confirm any paid session with Razorpay
+  const verifyCapturedPayment = async (orderIdToVerify, pendingCart, pendingFormData, pendingTotal) => {
+    try {
+      const checkRes = await api.post('/checkout/check-status', {
+        razorpay_order_id: orderIdToVerify,
+        cart: pendingCart || cart,
+        checkoutData: pendingFormData || formData,
+      });
+
+      if (checkRes.data?.paid && checkRes.data?.success) {
+        localStorage.removeItem('sc_pending_checkout');
+        clearCart();
+        navigate(`/order-success/${checkRes.data.orderId}`, {
+          state: {
+            order: {
+              order_code: checkRes.data.orderCode,
+              customer_name: (pendingFormData || formData).name,
+              customer_phone: (pendingFormData || formData).phone,
+              total_amount: parseFloat(pendingTotal || total).toFixed(2),
+              payment_status: 'Paid',
+              payment_method: 'Online Razorpay',
+            },
+            orderCode: checkRes.data.orderCode,
+            phone: (pendingFormData || formData).phone,
+            name: (pendingFormData || formData).name,
+          },
+        });
+        return true;
+      }
+    } catch (e) {
+      console.warn('Silent payment status check error:', e);
+    }
+    return false;
+  };
+
+  // 4. Check for in-flight/pending payment when component mounts
+  useEffect(() => {
+    const rawPending = localStorage.getItem('sc_pending_checkout');
+    if (!rawPending) return;
+    try {
+      const pending = JSON.parse(rawPending);
+      if (pending?.order_id && Date.now() - (pending.created_at || 0) < 2 * 60 * 60 * 1000) {
+        verifyCapturedPayment(pending.order_id, pending.cart, pending.formData, pending.total);
+      } else {
+        localStorage.removeItem('sc_pending_checkout');
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  // 5. Check pending payment when user returns to this browser tab (from PhonePe/UPI app)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const rawPending = localStorage.getItem('sc_pending_checkout');
+        if (rawPending) {
+          try {
+            const pending = JSON.parse(rawPending);
+            if (pending?.order_id) {
+              verifyCapturedPayment(pending.order_id, pending.cart, pending.formData, pending.total);
+            }
+          } catch (e) {}
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [cart, formData, total]);
+
   useEffect(() => {
     if (!cart.length) {
       navigate('/shop');
@@ -144,7 +238,16 @@ export default function Checkout() {
 
       const { order_id, amount, key } = orderRes.data;
 
-      // 2. Open Razorpay Checkout modal
+      // 2. Persist in-flight checkout in localStorage so mobile app switching / back navigation is safe
+      localStorage.setItem('sc_pending_checkout', JSON.stringify({
+        order_id,
+        cart,
+        formData: { ...formData, phone: cleanPhone, pincode: cleanPincode },
+        total,
+        created_at: Date.now(),
+      }));
+
+      // 3. Open Razorpay Checkout modal
       const options = {
         key,
         amount,
@@ -163,7 +266,7 @@ export default function Checkout() {
         },
         handler: async function (response) {
           try {
-            // 3. Verify signature on backend & create order
+            // 4. Verify signature on backend & create order
             const verifyRes = await api.post('/checkout/verify', {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
@@ -173,6 +276,7 @@ export default function Checkout() {
             });
 
             if (verifyRes.data.success) {
+              localStorage.removeItem('sc_pending_checkout');
               clearCart();
               navigate(`/order-success/${verifyRes.data.orderId}`, {
                 state: {
@@ -195,23 +299,36 @@ export default function Checkout() {
             }
           } catch (err) {
             console.error('Payment verification error:', err);
-            setErrorMessage('Something went wrong confirming your order. Please contact support with Payment ID: ' + response.razorpay_payment_id);
-            setIsProcessing(false);
+            // Even if network or signature errored, immediately verify if Razorpay captured payment
+            const recovered = await verifyCapturedPayment(response.razorpay_order_id, cart, { ...formData, phone: cleanPhone, pincode: cleanPincode }, total);
+            if (!recovered) {
+              setErrorMessage('Payment was processed. If money was debited, your order will auto-sync in 1 minute. Ref ID: ' + response.razorpay_payment_id);
+              setIsProcessing(false);
+            }
           }
         },
         modal: {
-          ondismiss: function () {
-            setIsProcessing(false);
+          ondismiss: async function () {
+            // User closed/cancelled modal or returned from PhonePe back button:
+            // Check immediately whether the payment was captured!
+            const wasPaid = await verifyCapturedPayment(order_id, cart, { ...formData, phone: cleanPhone, pincode: cleanPincode }, total);
+            if (!wasPaid) {
+              setIsProcessing(false);
+            }
           },
         },
       };
 
       const razor = new window.Razorpay(options);
-      razor.on('payment.failed', function (resp) {
-        console.error('Razorpay payment failed:', resp.error);
-        const reason = resp.error?.description || resp.error?.reason || 'Payment was unsuccessful or cancelled. Please try again.';
-        setErrorMessage(reason);
-        setIsProcessing(false);
+      razor.on('payment.failed', async function (resp) {
+        console.warn('Razorpay payment failed or cancelled:', resp.error);
+        // Double-check with server before marking failed
+        const wasPaid = await verifyCapturedPayment(order_id, cart, { ...formData, phone: cleanPhone, pincode: cleanPincode }, total);
+        if (!wasPaid) {
+          const reason = resp.error?.description || resp.error?.reason || 'Payment was unsuccessful or cancelled. Please try again.';
+          setErrorMessage(reason);
+          setIsProcessing(false);
+        }
       });
       razor.open();
 

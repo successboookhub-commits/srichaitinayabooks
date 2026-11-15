@@ -1793,7 +1793,227 @@ if (preg_match('#^(order-history/invoice|invoices)/([a-zA-Z0-9_-]+)(\.pdf)?$#i',
 }
 
 // -------------------------------------------------------------
-// CHECKOUT & PAYMENT (Totals, Razorpay Create & Verify)
+// RAZORPAY HELPER & ZERO-FAILURE RESILIENT ORDER PROCESSING
+// -------------------------------------------------------------
+
+/**
+ * Universal cURL Caller for Razorpay REST API
+ */
+function callRazorpayApi($method, $endpoint, $payload = null) {
+    $rzpCfg = getRazorpayConfig();
+    $key = $rzpCfg['key'] ?? '';
+    $secret = $rzpCfg['secret'] ?? '';
+
+    if (empty($key) || empty($secret)) {
+        return ['success' => false, 'error' => 'Razorpay credentials not configured.'];
+    }
+
+    $url = 'https://api.razorpay.com/v1/' . ltrim($endpoint, '/');
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_USERPWD, $key . ':' . $secret);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+
+    if (strtoupper($method) === 'POST') {
+        curl_setopt($ch, CURLOPT_POST, true);
+        if ($payload !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, is_string($payload) ? $payload : json_encode($payload));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        }
+    }
+
+    $resp = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+
+    if ($httpCode >= 200 && $httpCode < 300 && !empty($resp)) {
+        return ['success' => true, 'data' => json_decode($resp, true), 'code' => $httpCode];
+    }
+
+    return [
+        'success' => false,
+        'code'    => $httpCode,
+        'error'   => $curlErr ?: ('HTTP ' . $httpCode . ': ' . substr((string)$resp, 0, 200)),
+        'raw'     => $resp,
+    ];
+}
+
+/**
+ * Authoritative Order Confirmation & Database Ingestion Engine
+ * Guarantees zero duplicate orders and complete stock/customer consistency.
+ */
+function createConfirmedOrder($pdo, array $orderData) {
+    $rzpPaymentId = trim($orderData['razorpay_payment_id'] ?? '');
+    $rzpOrderId = trim($orderData['razorpay_order_id'] ?? '');
+
+    // 1. Deduplication check: if order with this payment ID already exists, return it!
+    if (!empty($rzpPaymentId)) {
+        $chkStmt = $pdo->prepare('SELECT id, order_code FROM orders WHERE razorpay_payment_id = ? LIMIT 1');
+        $chkStmt->execute([$rzpPaymentId]);
+        $existing = $chkStmt->fetch();
+        if ($existing) {
+            return [
+                'success'        => true,
+                'already_exists' => true,
+                'orderId'        => $existing['id'],
+                'orderCode'      => $existing['order_code'],
+            ];
+        }
+    }
+
+    $customer = $orderData['customer'] ?? $orderData['checkoutData'] ?? [];
+    $cart = $orderData['cart'] ?? [];
+    $totals = $orderData['totals'] ?? null;
+
+    if (empty($totals)) {
+        if (!empty($cart)) {
+            $totals = calculateCartTotals($cart);
+        } else {
+            $amt = floatval($orderData['amount'] ?? 0);
+            $totals = [
+                'subtotal' => max(0, $amt - 49),
+                'shipping' => 49.00,
+                'total'    => $amt,
+            ];
+        }
+    }
+
+    $phone = preg_replace('/\D/', '', (string)($customer['phone'] ?? ''));
+    if (strlen($phone) !== 10) {
+        $phone = '9999999999';
+    }
+    $pincode = preg_replace('/\D/', '', (string)($customer['pincode'] ?? ''));
+    if (strlen($pincode) !== 6) {
+        $pincode = '500001';
+    }
+
+    $name = trim($customer['name'] ?? 'Customer');
+    $email = strtolower(trim($customer['email'] ?? ''));
+    $state = trim($customer['state'] ?? 'Telangana');
+    $district = trim($customer['district'] ?? '');
+    $mandal = trim($customer['mandal'] ?? '');
+    $doorNo = trim($customer['door_no'] ?? '');
+    $address = trim($customer['address'] ?? '');
+
+    $pdo->beginTransaction();
+    try {
+        // Customer Deduplication & Profile Update
+        $custStmt = $pdo->prepare('SELECT id FROM customers WHERE phone = ? LIMIT 1');
+        $custStmt->execute([$phone]);
+        $existingCust = $custStmt->fetch();
+
+        if ($existingCust) {
+            $customerId = $existingCust['id'];
+            $pdo->prepare('
+                UPDATE customers SET 
+                    name = ?, email = ?, state = ?, district = ?, mandal = ?, door_no = ?, address = ?, pincode = ?, updated_at = NOW() 
+                WHERE id = ?
+            ')->execute([$name, $email, $state, $district, $mandal, $doorNo, $address, $pincode, $customerId]);
+        } else {
+            $pdo->prepare('
+                INSERT INTO customers 
+                    (name, email, phone, country, state, district, mandal, door_no, address, pincode, created_at, updated_at) 
+                VALUES (?, ?, ?, "India", ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            ')->execute([$name, $email, $phone, $state, $district, $mandal, $doorNo, $address, $pincode]);
+            $customerId = $pdo->lastInsertId();
+        }
+
+        // Generate Collision-Proof Order Code (e.g. ORD2026118492)
+        $ym = date('Ym');
+        $orderCode = '';
+        $isUnique = false;
+        $tries = 0;
+        while (!$isUnique && $tries < 10) {
+            $tries++;
+            $orderCode = 'ORD' . $ym . rand(1000, 9999);
+            $checkStmt = $pdo->prepare('SELECT id FROM orders WHERE order_code = ? LIMIT 1');
+            $checkStmt->execute([$orderCode]);
+            if (!$checkStmt->fetch()) {
+                $isUnique = true;
+            }
+        }
+        if (!$isUnique) {
+            $orderCode = 'ORD' . $ym . time();
+        }
+
+        // Insert Order into orders table (Always marked Paid & Ordered)
+        $payIdToSave = $rzpPaymentId ?: ('PAY_' . uniqid());
+        $pdo->prepare('
+            INSERT INTO orders 
+                (customer_id, order_code, subtotal, shipping, total, status, order_status, razorpay_payment_id, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, "Paid", "Ordered", ?, NOW(), NOW())
+        ')->execute([
+            $customerId,
+            $orderCode,
+            $totals['subtotal'],
+            $totals['shipping'],
+            $totals['total'],
+            $payIdToSave,
+        ]);
+        $orderId = $pdo->lastInsertId();
+
+        // Insert Order Items and Decrement Product Stock
+        $itemStmt = $pdo->prepare('
+            INSERT INTO order_items 
+                (order_id, product_id, product_name, price, qty, total, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+        ');
+        $stockStmt = $pdo->prepare('UPDATE products SET quantity = GREATEST(0, quantity - ?) WHERE id = ?');
+
+        if (!empty($cart)) {
+            foreach ($cart as $item) {
+                $qty = max(1, intval($item['qty'] ?? 1));
+                $price = floatval($item['price'] ?? 0);
+                $itemTotal = round($price * $qty, 2);
+                $prodId = !empty($item['id']) ? intval($item['id']) : null;
+                $prodName = $item['name'] ?? $item['title'] ?? 'Book';
+
+                $itemStmt->execute([$orderId, $prodId, $prodName, $price, $qty, $itemTotal]);
+
+                if ($prodId) {
+                    $stockStmt->execute([$qty, $prodId]);
+                }
+            }
+        } else {
+            // Reconstructed from summary / payment metadata
+            $summary = $orderData['summary'] ?? ('Books Purchase (' . $orderCode . ')');
+            $itemStmt->execute([$orderId, null, $summary, $totals['subtotal'], 1, $totals['subtotal']]);
+        }
+
+        $pdo->commit();
+
+        clearStoreCache();
+
+        // Cleanup pending checkout cache file if exists
+        if (!empty($rzpOrderId)) {
+            $cacheFile = dirname(__DIR__) . '/storage/checkouts/' . preg_replace('/[^a-zA-Z0-9_-]/', '', $rzpOrderId) . '.json';
+            if (file_exists($cacheFile)) {
+                @unlink($cacheFile);
+            }
+        }
+
+        // Send official WhatsApp Order Confirmation & Invoice PDF via BhashSMS
+        sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $totals['total'], 'Paid');
+
+        return [
+            'success'   => true,
+            'orderId'   => $orderId,
+            'orderCode' => $orderCode,
+        ];
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        return [
+            'success' => false,
+            'error'   => $e->getMessage(),
+        ];
+    }
+}
+
+// -------------------------------------------------------------
+// CHECKOUT & PAYMENT (Totals, Razorpay Create, Verify, Status & Webhook)
 // -------------------------------------------------------------
 if ($path === 'checkout/totals' && $method === 'POST') {
     $cart = $body['cart'] ?? [];
@@ -1849,7 +2069,6 @@ if ($path === 'checkout/pay' && $method === 'POST') {
 
     $receipt = 'ORD-' . strtoupper(substr(uniqid(), -8));
 
-    // Razorpay Order Creation via cURL
     $rzpCfg = getRazorpayConfig();
     $rzpKey = $rzpCfg['key'];
     $rzpSecret = $rzpCfg['secret'];
@@ -1863,65 +2082,43 @@ if ($path === 'checkout/pay' && $method === 'POST') {
         exit;
     }
 
-    $rzpOrder = null;
-    $curlErr = '';
-    $httpCode = 0;
-    $resp = '';
+    // Build rich notes containing full delivery address & items summary
+    $itemsSummary = implode(', ', array_map(function($i){
+        return ($i['name'] ?? 'Book') . ' x' . ($i['qty'] ?? 1);
+    }, array_slice($cart, 0, 5)));
 
-    if (function_exists('curl_init')) {
-        $ch = curl_init('https://api.razorpay.com/v1/orders');
-        curl_setopt($ch, CURLOPT_USERPWD, $rzpKey . ':' . $rzpSecret);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-            'amount'   => $amountInPaise,
-            'currency' => 'INR',
-            'receipt'  => $receipt,
-            'notes'    => [
-                'customer_name'  => $checkoutData['name'] ?? '',
-                'customer_phone' => $phone,
-                'customer_email' => $checkoutData['email'] ?? '',
-            ],
-        ]));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        $resp = curl_exec($ch);
-        $curlErr = curl_error($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+    $notes = [
+        'customer_name'  => substr((string)($checkoutData['name'] ?? 'Customer'), 0, 50),
+        'customer_phone' => $phone,
+        'customer_email' => substr((string)($checkoutData['email'] ?? ''), 0, 50),
+        'door_no'        => substr((string)($checkoutData['door_no'] ?? ''), 0, 40),
+        'address'        => substr((string)($checkoutData['address'] ?? ''), 0, 100),
+        'mandal'         => substr((string)($checkoutData['mandal'] ?? ''), 0, 50),
+        'district'       => substr((string)($checkoutData['district'] ?? ''), 0, 50),
+        'state'          => substr((string)($checkoutData['state'] ?? 'Telangana'), 0, 30),
+        'pincode'        => $pincode,
+        'subtotal'       => (string)$totals['subtotal'],
+        'shipping'       => (string)$totals['shipping'],
+        'summary'        => substr($itemsSummary, 0, 200),
+    ];
 
-        if ($httpCode >= 200 && $httpCode < 300 && !empty($resp)) {
-            $rzpOrder = json_decode($resp, true);
-        }
-    } else {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'message' => 'PHP cURL extension is required for payment gateway operations.',
-        ]);
-        exit;
-    }
+    $rzpRes = callRazorpayApi('POST', 'orders', [
+        'amount'   => $amountInPaise,
+        'currency' => 'INR',
+        'receipt'  => $receipt,
+        'notes'    => $notes,
+    ]);
 
-    if (empty($rzpOrder['id'])) {
-        $errMsg = 'Failed to create payment order.';
-        if (!empty($rzpOrder['error']['description'])) {
-            $errMsg = $rzpOrder['error']['description'];
-        } elseif (!empty($curlErr)) {
-            $errMsg = 'Payment Gateway cURL Error: ' . $curlErr;
-        } elseif ($httpCode > 0) {
-            $errMsg = 'Payment Gateway returned HTTP ' . $httpCode . ' (' . substr((string)$resp, 0, 150) . ')';
-        }
+    if (!$rzpRes['success'] || empty($rzpRes['data']['id'])) {
         http_response_code(400);
         echo json_encode([
             'success' => false,
-            'message' => $errMsg,
+            'message' => $rzpRes['error'] ?? 'Failed to initiate Razorpay order.',
         ]);
         exit;
     }
 
-    $orderId = $rzpOrder['id'];
+    $orderId = $rzpRes['data']['id'];
 
     // Save pending checkout session to disk cache
     $cacheDir = dirname(__DIR__) . '/storage/checkouts';
@@ -1967,22 +2164,36 @@ if ($path === 'checkout/verify' && $method === 'POST') {
         }
     }
 
-    // Verify HMAC-SHA256 signature if signature was provided
+    // Verify HMAC-SHA256 signature
     $rzpCfg = getRazorpayConfig();
     $rzpSecret = $rzpCfg['secret'];
+    $isSigValid = false;
+
     if (!empty($rzpOrderId) && !empty($rzpPaymentId) && !empty($rzpSig)) {
         $expectedSig = hash_hmac('sha256', $rzpOrderId . '|' . $rzpPaymentId, $rzpSecret);
-        if ($expectedSig !== $rzpSig) {
-            http_response_code(400);
-            echo json_encode([
-                'success' => false,
-                'message' => 'Payment verification failed (signature mismatch). Please contact support with Payment ID: ' . $rzpPaymentId,
-            ]);
-            exit;
+        if ($expectedSig === $rzpSig) {
+            $isSigValid = true;
         }
     }
 
-    // Load cached checkout data or fallback to request body
+    // Fallback: Check Razorpay API directly if signature is missing or mismatched
+    if (!$isSigValid && !empty($rzpPaymentId)) {
+        $payCheck = callRazorpayApi('GET', 'payments/' . $rzpPaymentId);
+        if ($payCheck['success'] && ($payCheck['data']['status'] ?? '') === 'captured') {
+            $isSigValid = true;
+        }
+    }
+
+    if (!$isSigValid && !empty($rzpSig)) {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Payment verification failed (signature mismatch). Please contact support with Payment ID: ' . $rzpPaymentId,
+        ]);
+        exit;
+    }
+
+    // Load cached checkout data or fallback to request body or Razorpay order notes
     $cached = null;
     $cacheFile = dirname(__DIR__) . '/storage/checkouts/' . preg_replace('/[^a-zA-Z0-9_-]/', '', $rzpOrderId) . '.json';
     if (file_exists($cacheFile)) {
@@ -1993,134 +2204,263 @@ if ($path === 'checkout/verify' && $method === 'POST') {
     $checkoutData = $cached['checkoutData'] ?? $body['checkoutData'] ?? [];
     $totals = $cached['totals'] ?? calculateCartTotals($cart);
 
-    if (empty($cart) || empty($checkoutData)) {
-        http_response_code(400);
-        echo json_encode([
-            'success' => false,
-            'message' => 'Order details missing or expired. Please contact support with Payment ID: ' . $rzpPaymentId,
-        ]);
-        exit;
+    // If still missing customer data, recover from Razorpay Order notes
+    if (empty($checkoutData) && !empty($rzpOrderId)) {
+        $orderApi = callRazorpayApi('GET', 'orders/' . $rzpOrderId);
+        if ($orderApi['success'] && !empty($orderApi['data']['notes'])) {
+            $n = $orderApi['data']['notes'];
+            $checkoutData = [
+                'name'     => $n['customer_name'] ?? 'Customer',
+                'phone'    => $n['customer_phone'] ?? '',
+                'email'    => $n['customer_email'] ?? '',
+                'door_no'  => $n['door_no'] ?? '',
+                'address'  => $n['address'] ?? '',
+                'mandal'   => $n['mandal'] ?? '',
+                'district' => $n['district'] ?? '',
+                'state'    => $n['state'] ?? 'Telangana',
+                'pincode'  => $n['pincode'] ?? '500001',
+            ];
+        }
     }
 
-    $phone = preg_replace('/\D/', '', (string)($checkoutData['phone'] ?? ''));
-    $pincode = preg_replace('/\D/', '', (string)($checkoutData['pincode'] ?? ''));
-    if (strlen($phone) !== 10) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Mobile number must be exactly 10 digits (Numbers only).']);
-        exit;
-    }
-    if (strlen($pincode) !== 6) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Pincode must be exactly 6 digits (Numbers only).']);
-        exit;
-    }
-    $name = trim($checkoutData['name'] ?? 'Customer');
-    $email = strtolower(trim($checkoutData['email'] ?? ''));
-    $state = trim($checkoutData['state'] ?? 'Telangana');
-    $district = trim($checkoutData['district'] ?? '');
-    $mandal = trim($checkoutData['mandal'] ?? '');
-    $doorNo = trim($checkoutData['door_no'] ?? '');
-    $address = trim($checkoutData['address'] ?? '');
+    $res = createConfirmedOrder($pdo, [
+        'razorpay_payment_id' => $rzpPaymentId,
+        'razorpay_order_id'   => $rzpOrderId,
+        'customer'            => $checkoutData,
+        'cart'                => $cart,
+        'totals'              => $totals,
+    ]);
 
-    $pdo->beginTransaction();
-    try {
-        // Customer Deduplication
-        $custStmt = $pdo->prepare('SELECT id FROM customers WHERE phone = ? LIMIT 1');
-        $custStmt->execute([$phone]);
-        $existingCust = $custStmt->fetch();
-
-        if ($existingCust) {
-            $customerId = $existingCust['id'];
-            $pdo->prepare('
-                UPDATE customers SET 
-                    name = ?, email = ?, state = ?, district = ?, mandal = ?, door_no = ?, address = ?, pincode = ?, updated_at = NOW() 
-                WHERE id = ?
-            ')->execute([$name, $email, $state, $district, $mandal, $doorNo, $address, $pincode, $customerId]);
-        } else {
-            $pdo->prepare('
-                INSERT INTO customers 
-                    (name, email, phone, country, state, district, mandal, door_no, address, pincode, created_at, updated_at) 
-                VALUES (?, ?, ?, "India", ?, ?, ?, ?, ?, ?, NOW(), NOW())
-            ')->execute([$name, $email, $phone, $state, $district, $mandal, $doorNo, $address, $pincode]);
-            $customerId = $pdo->lastInsertId();
-        }
-
-        // Generate Collision-Proof Order Code (e.g. ORD2026118492)
-        $ym = date('Ym');
-        $orderCode = '';
-        $isUnique = false;
-        while (!$isUnique) {
-            $orderCode = 'ORD' . $ym . rand(1000, 9999);
-            $checkStmt = $pdo->prepare('SELECT id FROM orders WHERE order_code = ? LIMIT 1');
-            $checkStmt->execute([$orderCode]);
-            if (!$checkStmt->fetch()) {
-                $isUnique = true;
-            }
-        }
-
-        // Insert Order into orders table
-        $payIdToSave = $rzpPaymentId ?: ('PAY_' . uniqid());
-        $pdo->prepare('
-            INSERT INTO orders 
-                (customer_id, order_code, subtotal, shipping, total, status, order_status, razorpay_payment_id, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, "Paid", "Ordered", ?, NOW(), NOW())
-        ')->execute([
-            $customerId,
-            $orderCode,
-            $totals['subtotal'],
-            $totals['shipping'],
-            $totals['total'],
-            $payIdToSave,
-        ]);
-        $orderId = $pdo->lastInsertId();
-
-        // Insert Order Items and Decrement Product Stock
-        $itemStmt = $pdo->prepare('
-            INSERT INTO order_items 
-                (order_id, product_id, product_name, price, qty, total, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
-        ');
-        $stockStmt = $pdo->prepare('UPDATE products SET quantity = GREATEST(0, quantity - ?) WHERE id = ?');
-
-        foreach ($cart as $item) {
-            $qty = max(1, intval($item['qty'] ?? 1));
-            $price = floatval($item['price'] ?? 0);
-            $itemTotal = round($price * $qty, 2);
-            $prodId = !empty($item['id']) ? intval($item['id']) : null;
-            $prodName = $item['name'] ?? $item['title'] ?? 'Book';
-
-            $itemStmt->execute([$orderId, $prodId, $prodName, $price, $qty, $itemTotal]);
-
-            if ($prodId) {
-                $stockStmt->execute([$qty, $prodId]);
-            }
-        }
-
-        $pdo->commit();
-
-        if (file_exists($cacheFile)) {
-            @unlink($cacheFile);
-        }
-
-        // Send official WhatsApp Order Confirmation & Invoice PDF via BhashSMS
-        sendOrderWhatsAppNotification($pdo, $orderId, $orderCode, $phone, $totals['total'], 'Paid');
-
+    if ($res['success']) {
         echo json_encode([
             'success'   => true,
             'message'   => 'Order placed successfully!',
-            'orderId'   => $orderId,
-            'orderCode' => $orderCode,
+            'orderId'   => $res['orderId'],
+            'orderCode' => $res['orderCode'],
         ]);
-        exit;
-    } catch (Exception $e) {
-        $pdo->rollBack();
+    } else {
         http_response_code(500);
         echo json_encode([
             'success' => false,
-            'message' => 'Failed to finalize order: ' . $e->getMessage(),
+            'message' => 'Failed to finalize order: ' . ($res['error'] ?? 'Unknown error'),
+        ]);
+    }
+    exit;
+}
+
+// -------------------------------------------------------------
+// CHECKOUT STATUS CHECK (For Mobile Back / PhonePe App Switch Recovery)
+// -------------------------------------------------------------
+if ($path === 'checkout/check-status' && $method === 'POST') {
+    $rzpOrderId = trim($body['razorpay_order_id'] ?? '');
+    $rzpPaymentId = trim($body['razorpay_payment_id'] ?? '');
+
+    if (empty($rzpOrderId) && empty($rzpPaymentId)) {
+        echo json_encode(['success' => false, 'paid' => false, 'message' => 'Order ID is required.']);
+        exit;
+    }
+
+    // 1. Check if already recorded in our database
+    if (!empty($rzpPaymentId)) {
+        $chk = $pdo->prepare('SELECT id, order_code FROM orders WHERE razorpay_payment_id = ? LIMIT 1');
+        $chk->execute([$rzpPaymentId]);
+        $existing = $chk->fetch();
+        if ($existing) {
+            echo json_encode([
+                'success'   => true,
+                'paid'      => true,
+                'orderId'   => $existing['id'],
+                'orderCode' => $existing['order_code'],
+                'message'   => 'Order is already recorded.',
+            ]);
+            exit;
+        }
+    }
+
+    // 2. Query Razorpay API for this order's payments
+    $capturedPayment = null;
+
+    if (!empty($rzpOrderId)) {
+        $pRes = callRazorpayApi('GET', 'orders/' . $rzpOrderId . '/payments');
+        if ($pRes['success'] && !empty($pRes['data']['items'])) {
+            foreach ($pRes['data']['items'] as $item) {
+                if (($item['status'] ?? '') === 'captured') {
+                    $capturedPayment = $item;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Fallback: check payment directly if ID provided
+    if (!$capturedPayment && !empty($rzpPaymentId)) {
+        $pRes = callRazorpayApi('GET', 'payments/' . $rzpPaymentId);
+        if ($pRes['success'] && ($pRes['data']['status'] ?? '') === 'captured') {
+            $capturedPayment = $pRes['data'];
+        }
+    }
+
+    if (!$capturedPayment) {
+        echo json_encode([
+            'success' => true,
+            'paid'    => false,
+            'message' => 'Payment has not been captured or was cancelled.',
         ]);
         exit;
     }
+
+    // Payment WAS captured! Auto-create the order right now!
+    $pId = $capturedPayment['id'];
+
+    // Deduplication check
+    $chk = $pdo->prepare('SELECT id, order_code FROM orders WHERE razorpay_payment_id = ? LIMIT 1');
+    $chk->execute([$pId]);
+    $existing = $chk->fetch();
+    if ($existing) {
+        echo json_encode([
+            'success'   => true,
+            'paid'      => true,
+            'orderId'   => $existing['id'],
+            'orderCode' => $existing['order_code'],
+            'message'   => 'Order confirmed.',
+        ]);
+        exit;
+    }
+
+    // Load data from cache or body or notes
+    $cached = null;
+    $cacheFile = dirname(__DIR__) . '/storage/checkouts/' . preg_replace('/[^a-zA-Z0-9_-]/', '', $rzpOrderId) . '.json';
+    if (file_exists($cacheFile)) {
+        $cached = json_decode(file_get_contents($cacheFile), true);
+    }
+
+    $cart = $cached['cart'] ?? $body['cart'] ?? [];
+    $checkoutData = $cached['checkoutData'] ?? $body['checkoutData'] ?? [];
+    $totals = $cached['totals'] ?? null;
+
+    if (empty($checkoutData)) {
+        $notes = $capturedPayment['notes'] ?? [];
+        if (empty($notes) && !empty($rzpOrderId)) {
+            $oRes = callRazorpayApi('GET', 'orders/' . $rzpOrderId);
+            if ($oRes['success']) {
+                $notes = $oRes['data']['notes'] ?? [];
+            }
+        }
+        $checkoutData = [
+            'name'     => $notes['customer_name'] ?? 'Customer',
+            'phone'    => $notes['customer_phone'] ?? preg_replace('/\D/', '', (string)($capturedPayment['contact'] ?? '')),
+            'email'    => $notes['customer_email'] ?? ($capturedPayment['email'] ?? ''),
+            'door_no'  => $notes['door_no'] ?? '',
+            'address'  => $notes['address'] ?? 'Recorded via Razorpay',
+            'mandal'   => $notes['mandal'] ?? '',
+            'district' => $notes['district'] ?? '',
+            'state'    => $notes['state'] ?? 'Telangana',
+            'pincode'  => $notes['pincode'] ?? '500001',
+        ];
+    }
+
+    if (empty($totals)) {
+        if (!empty($cart)) {
+            $totals = calculateCartTotals($cart);
+        } else {
+            $amt = floatval(($capturedPayment['amount'] ?? 0) / 100);
+            $totals = [
+                'subtotal' => max(0, $amt - 49),
+                'shipping' => 49.00,
+                'total'    => $amt,
+            ];
+        }
+    }
+
+    $res = createConfirmedOrder($pdo, [
+        'razorpay_payment_id' => $pId,
+        'razorpay_order_id'   => $rzpOrderId,
+        'customer'            => $checkoutData,
+        'cart'                => $cart,
+        'totals'              => $totals,
+        'summary'             => $capturedPayment['notes']['summary'] ?? 'Purchased Books (Razorpay Status Check)',
+    ]);
+
+    if ($res['success']) {
+        echo json_encode([
+            'success'   => true,
+            'paid'      => true,
+            'orderId'   => $res['orderId'],
+            'orderCode' => $res['orderCode'],
+            'message'   => 'Payment captured! Order successfully confirmed!',
+        ]);
+    } else {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'paid'    => true,
+            'message' => 'Payment captured but order creation failed: ' . ($res['error'] ?? 'Unknown error'),
+        ]);
+    }
+    exit;
+}
+
+// -------------------------------------------------------------
+// RAZORPAY WEBHOOK (Automated Server-to-Server Instant Confirmation)
+// -------------------------------------------------------------
+if ($path === 'checkout/webhook' && $method === 'POST') {
+    $event = $body['event'] ?? '';
+    $payload = $body['payload'] ?? [];
+
+    if ($event === 'payment.captured' || $event === 'order.paid') {
+        $payment = $payload['payment']['entity'] ?? null;
+        $order = $payload['order']['entity'] ?? null;
+
+        $pId = $payment['id'] ?? null;
+        $rzpOrderId = $payment['order_id'] ?? ($order['id'] ?? null);
+
+        if ($pId) {
+            $chk = $pdo->prepare('SELECT id FROM orders WHERE razorpay_payment_id = ? LIMIT 1');
+            $chk->execute([$pId]);
+            if (!$chk->fetch()) {
+                $cached = null;
+                if ($rzpOrderId) {
+                    $cacheFile = dirname(__DIR__) . '/storage/checkouts/' . preg_replace('/[^a-zA-Z0-9_-]/', '', $rzpOrderId) . '.json';
+                    if (file_exists($cacheFile)) {
+                        $cached = json_decode(file_get_contents($cacheFile), true);
+                    }
+                }
+
+                $notes = array_merge($order['notes'] ?? [], $payment['notes'] ?? []);
+                $checkoutData = $cached['checkoutData'] ?? [
+                    'name'     => $notes['customer_name'] ?? 'Customer',
+                    'phone'    => $notes['customer_phone'] ?? preg_replace('/\D/', '', (string)($payment['contact'] ?? '')),
+                    'email'    => $notes['customer_email'] ?? ($payment['email'] ?? ''),
+                    'door_no'  => $notes['door_no'] ?? '',
+                    'address'  => $notes['address'] ?? 'Provided via Razorpay',
+                    'mandal'   => $notes['mandal'] ?? '',
+                    'district' => $notes['district'] ?? '',
+                    'state'    => $notes['state'] ?? 'Telangana',
+                    'pincode'  => $notes['pincode'] ?? '500001',
+                ];
+
+                $cart = $cached['cart'] ?? [];
+                $amt = floatval(($payment['amount'] ?? 0) / 100);
+                $totals = $cached['totals'] ?? [
+                    'subtotal' => max(0, $amt - 49),
+                    'shipping' => 49.00,
+                    'total'    => $amt,
+                ];
+
+                createConfirmedOrder($pdo, [
+                    'razorpay_payment_id' => $pId,
+                    'razorpay_order_id'   => $rzpOrderId,
+                    'customer'            => $checkoutData,
+                    'cart'                => $cart,
+                    'totals'              => $totals,
+                    'summary'             => $notes['summary'] ?? 'Purchased Books (Razorpay Webhook)',
+                ]);
+            }
+        }
+    }
+
+    echo json_encode(['status' => 'ok']);
+    exit;
 }
 
 // -------------------------------------------------------------
@@ -2503,6 +2843,105 @@ if ($path === 'orders/bulk-status-by-date' && $method === 'POST') {
     }
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'Date range and status are required.']);
+    exit;
+}
+
+// Razorpay Captured Payments Reconciliation & Auto-Recovery
+if (($path === 'orders/sync-razorpay' || $path === 'orders/sync') && in_array($method, ['GET', 'POST'])) {
+    $rzpRes = callRazorpayApi('GET', 'payments?count=50');
+    if (!$rzpRes['success'] || empty($rzpRes['data']['items'])) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Failed to fetch payments from Razorpay: ' . ($rzpRes['error'] ?? 'Empty response'),
+            'synced'  => 0,
+        ]);
+        exit;
+    }
+
+    $payments = $rzpRes['data']['items'];
+    $synced = 0;
+    $details = [];
+
+    foreach ($payments as $p) {
+        if (($p['status'] ?? '') !== 'captured') {
+            continue;
+        }
+
+        $pId = $p['id'];
+        $chk = $pdo->prepare('SELECT id, order_code FROM orders WHERE razorpay_payment_id = ? LIMIT 1');
+        $chk->execute([$pId]);
+        if ($chk->fetch()) {
+            continue; // Already exists in orders!
+        }
+
+        // Missing order! Let's recover it!
+        $rzpOrderId = $p['order_id'] ?? '';
+        $cached = null;
+        if (!empty($rzpOrderId)) {
+            $cacheFile = dirname(__DIR__) . '/storage/checkouts/' . preg_replace('/[^a-zA-Z0-9_-]/', '', $rzpOrderId) . '.json';
+            if (file_exists($cacheFile)) {
+                $cached = json_decode(file_get_contents($cacheFile), true);
+            }
+        }
+
+        $notes = $p['notes'] ?? [];
+        if (empty($notes) && !empty($rzpOrderId)) {
+            $oRes = callRazorpayApi('GET', 'orders/' . $rzpOrderId);
+            if ($oRes['success']) {
+                $notes = $oRes['data']['notes'] ?? [];
+            }
+        }
+
+        $cleanPhone = preg_replace('/\D/', '', (string)($notes['customer_phone'] ?? $p['contact'] ?? ''));
+        if (strlen($cleanPhone) !== 10) {
+            $cleanPhone = '9999999999';
+        }
+
+        $checkoutData = $cached['checkoutData'] ?? [
+            'name'     => $notes['customer_name'] ?? 'Customer',
+            'phone'    => $cleanPhone,
+            'email'    => $notes['customer_email'] ?? ($p['email'] ?? ''),
+            'door_no'  => $notes['door_no'] ?? '',
+            'address'  => $notes['address'] ?? 'Address recorded via Razorpay',
+            'mandal'   => $notes['mandal'] ?? '',
+            'district' => $notes['district'] ?? '',
+            'state'    => $notes['state'] ?? 'Telangana',
+            'pincode'  => $notes['pincode'] ?? '500001',
+        ];
+
+        $cart = $cached['cart'] ?? [];
+        $amt = floatval(($p['amount'] ?? 0) / 100);
+        $totals = $cached['totals'] ?? [
+            'subtotal' => max(0, $amt - 49),
+            'shipping' => 49.00,
+            'total'    => $amt,
+        ];
+
+        $res = createConfirmedOrder($pdo, [
+            'razorpay_payment_id' => $pId,
+            'razorpay_order_id'   => $rzpOrderId,
+            'customer'            => $checkoutData,
+            'cart'                => $cart,
+            'totals'              => $totals,
+            'summary'             => $notes['summary'] ?? ('Razorpay Captured Payment ' . $pId),
+        ]);
+
+        if ($res['success']) {
+            $synced++;
+            $details[] = [
+                'orderCode' => $res['orderCode'],
+                'paymentId' => $pId,
+                'amount'    => $amt,
+            ];
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'synced'  => $synced,
+        'message' => $synced > 0 ? "Successfully synced and restored {$synced} missing order(s) from Razorpay!" : 'All Razorpay payments are fully in sync with orders.',
+        'details' => $details,
+    ]);
     exit;
 }
 

@@ -68,8 +68,8 @@ function getRazorpayConfig() {
     $forceLive = $isLiveDomain || ($rawMode === 'live');
 
     if ($forceLive) {
-        $liveKey = getEnvVal('RAZORPAY_LIVE_KEY') ?: 'rzp_live_SIJDGxy85sgrKV';
-        $liveSecret = getEnvVal('RAZORPAY_LIVE_SECRET') ?: 'gj9CI3Dq9wKU5dapQR61Vyo3';
+        $liveKey = getEnvVal('RAZORPAY_LIVE_KEY') ?: getEnvVal('RAZORPAY_KEY') ?: 'rzp_live_SIJDGxy85sgrKV';
+        $liveSecret = getEnvVal('RAZORPAY_LIVE_SECRET') ?: getEnvVal('RAZORPAY_SECRET') ?: 'gj9CI3Dq9wKU5dapQR61Vyo3';
 
         // Safeguard: If env accidentally has test key, enforce official live key
         if (str_starts_with($liveKey, 'rzp_test_')) {

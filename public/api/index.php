@@ -968,7 +968,9 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         $oldPrice = floatval($_POST['old_price'] ?? $body['old_price'] ?? 0);
         $discount = floatval($_POST['discount'] ?? $body['discount'] ?? 0);
         $stock = intval($_POST['stock'] ?? $_POST['quantity'] ?? $body['stock'] ?? $body['quantity'] ?? 10);
-        $publicationId = intval($_POST['publication_id'] ?? $body['publication_id'] ?? 0) ?: null;
+        
+        $pubVal = $_POST['publication_id'] ?? $body['publication_id'] ?? '';
+        $publicationId = ($pubVal !== '' && $pubVal !== null) ? strval($pubVal) : '0';
         
         $catInput = $_POST['category_ids'] ?? $body['category_ids'] ?? [];
         if (is_string($catInput)) {
@@ -994,34 +996,76 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         $imagePath = '';
         if (!empty($_FILES['main_photo']['name']) || !empty($_FILES['image']['name'])) {
             $f = !empty($_FILES['main_photo']['name']) ? $_FILES['main_photo'] : $_FILES['image'];
-            $ext = pathinfo($f['name'], PATHINFO_EXTENSION);
-            $fname = uniqid('prod_') . '.' . $ext;
-            $dest = dirname(__DIR__) . '/storage/products/' . $fname;
-            if (!is_dir(dirname($dest))) mkdir(dirname($dest), 0777, true);
-            if (move_uploaded_file($f['tmp_name'], $dest)) {
-                $imagePath = 'products/' . $fname;
-                $pubDest = dirname(__DIR__) . '/public/storage/products/' . $fname;
-                $distDest = dirname(__DIR__) . '/dist/storage/products/' . $fname;
-                if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
-                if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
-                @copy($dest, $pubDest);
-                @copy($dest, $distDest);
+            if (($f['error'] ?? 0) === UPLOAD_ERR_OK && is_uploaded_file($f['tmp_name'])) {
+                $rawExt = pathinfo($f['name'], PATHINFO_EXTENSION);
+                $ext = strtolower(preg_replace('/[^a-z0-9]/i', '', $rawExt)) ?: 'jpg';
+                $fname = uniqid('prod_') . '.' . $ext;
+                $dest = dirname(__DIR__) . '/storage/products/' . $fname;
+                if (!is_dir(dirname($dest))) @mkdir(dirname($dest), 0777, true);
+                if (move_uploaded_file($f['tmp_name'], $dest)) {
+                    $imagePath = 'products/' . $fname;
+                    $pubDest = dirname(__DIR__) . '/public/storage/products/' . $fname;
+                    $distDest = dirname(__DIR__) . '/dist/storage/products/' . $fname;
+                    if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
+                    if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
+                    @copy($dest, $pubDest);
+                    @copy($dest, $distDest);
+                    @chmod($dest, 0644);
+                    @chmod($pubDest, 0644);
+                    @chmod($distDest, 0644);
+                }
             }
         }
         if (!$imagePath) {
-            $imagePath = $_POST['main_photo'] ?? $body['main_photo'] ?? $_POST['image'] ?? $body['image'] ?? '';
+            $imagePath = strval($_POST['main_photo'] ?? $body['main_photo'] ?? $_POST['image'] ?? $body['image'] ?? '');
         }
 
+        $relatedPhotosJson = $imagePath !== '' ? json_encode([$imagePath]) : json_encode([]);
         $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $name), '-')) . '-' . time();
+        $createdId = null;
+
         try {
-            $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, purchase_amount, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
-            $stmt->execute([$name, $slug, $price, $purchaseAmount, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive]);
-        } catch (\Throwable $e) {
-            $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
-            $stmt->execute([$name, $slug, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive]);
+            // Attempt 1: All columns including purchase_amount and related_photos
+            $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, purchase_amount, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, related_photos, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
+            $stmt->execute([$name, $slug, $price, $purchaseAmount, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $relatedPhotosJson, $isFeatured, $isActive]);
+            $createdId = intval($pdo->lastInsertId());
+        } catch (\Throwable $e1) {
+            try {
+                // Attempt 2: Fallback without purchase_amount
+                $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, related_photos, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
+                $stmt->execute([$name, $slug, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $relatedPhotosJson, $isFeatured, $isActive]);
+                $createdId = intval($pdo->lastInsertId());
+            } catch (\Throwable $e2) {
+                try {
+                    // Attempt 3: Standard legacy schema fallback
+                    $stmt = $pdo->prepare('INSERT INTO products (name, slug, total_price, old_price, discount, quantity, publication_id, category_ids, description, weight, shipping_charge, is_weightless, main_photo, is_featured, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
+                    $stmt->execute([$name, $slug, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $imagePath, $isFeatured, $isActive]);
+                    $createdId = intval($pdo->lastInsertId());
+                } catch (\Throwable $e3) {
+                    http_response_code(500);
+                    echo json_encode(['success' => false, 'message' => 'Database error adding product: ' . $e3->getMessage()]);
+                    exit;
+                }
+            }
         }
+
+        // Synchronize featured home section if featured
+        if ($isFeatured && $createdId) {
+            try {
+                $secStmt = $pdo->query("SELECT id, product_ids FROM home_sections WHERE LOWER(title) LIKE '%featured%'");
+                while ($sec = $secStmt->fetch()) {
+                    $pids = json_decode($sec['product_ids'], true) ?: [];
+                    if (!in_array($createdId, $pids)) {
+                        array_unshift($pids, $createdId);
+                    }
+                    $upSec = $pdo->prepare('UPDATE home_sections SET product_ids = ?, updated_at = NOW() WHERE id = ?');
+                    $upSec->execute([json_encode($pids), $sec['id']]);
+                }
+            } catch (\Throwable $e) {}
+        }
+
         clearStoreCache();
-        echo json_encode(['success' => true, 'message' => 'Product added successfully.', 'id' => $pdo->lastInsertId()]);
+        echo json_encode(['success' => true, 'message' => 'Product added successfully.', 'id' => $createdId, 'product' => ['id' => $createdId, 'name' => $name, 'slug' => $slug, 'image' => $imagePath, 'main_photo' => $imagePath]]);
         exit;
     }
 }
@@ -1101,8 +1145,9 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
                  (isset($body['quantity']) && $body['quantity'] !== '' ? intval($body['quantity']) :
                  (isset($body['stock']) && $body['stock'] !== '' ? intval($body['stock']) : intval($current['quantity'] ?? 10))));
 
-        $publicationId = isset($_POST['publication_id']) && $_POST['publication_id'] !== '' ? intval($_POST['publication_id']) :
-                         (isset($body['publication_id']) && $body['publication_id'] !== '' ? intval($body['publication_id']) : (!empty($current['publication_id']) ? intval($current['publication_id']) : null));
+        $pubVal = isset($_POST['publication_id']) && $_POST['publication_id'] !== '' ? $_POST['publication_id'] :
+                         (isset($body['publication_id']) && $body['publication_id'] !== '' ? $body['publication_id'] : (!empty($current['publication_id']) ? $current['publication_id'] : '0'));
+        $publicationId = strval($pubVal);
 
         if (isset($_POST['category_ids'])) {
             $catInput = $_POST['category_ids'];
@@ -1153,18 +1198,24 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
         $imagePath = '';
         if (!empty($_FILES['main_photo']['name']) || !empty($_FILES['image']['name'])) {
             $f = !empty($_FILES['main_photo']['name']) ? $_FILES['main_photo'] : $_FILES['image'];
-            $ext = pathinfo($f['name'], PATHINFO_EXTENSION);
-            $fname = uniqid('prod_') . '.' . $ext;
-            $dest = dirname(__DIR__) . '/storage/products/' . $fname;
-            if (!is_dir(dirname($dest))) mkdir(dirname($dest), 0777, true);
-            if (move_uploaded_file($f['tmp_name'], $dest)) {
-                $imagePath = 'products/' . $fname;
-                $pubDest = dirname(__DIR__) . '/public/storage/products/' . $fname;
-                $distDest = dirname(__DIR__) . '/dist/storage/products/' . $fname;
-                if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
-                if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
-                @copy($dest, $pubDest);
-                @copy($dest, $distDest);
+            if (($f['error'] ?? 0) === UPLOAD_ERR_OK && is_uploaded_file($f['tmp_name'])) {
+                $rawExt = pathinfo($f['name'], PATHINFO_EXTENSION);
+                $ext = strtolower(preg_replace('/[^a-z0-9]/i', '', $rawExt)) ?: 'jpg';
+                $fname = uniqid('prod_') . '.' . $ext;
+                $dest = dirname(__DIR__) . '/storage/products/' . $fname;
+                if (!is_dir(dirname($dest))) @mkdir(dirname($dest), 0777, true);
+                if (move_uploaded_file($f['tmp_name'], $dest)) {
+                    $imagePath = 'products/' . $fname;
+                    $pubDest = dirname(__DIR__) . '/public/storage/products/' . $fname;
+                    $distDest = dirname(__DIR__) . '/dist/storage/products/' . $fname;
+                    if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
+                    if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
+                    @copy($dest, $pubDest);
+                    @copy($dest, $distDest);
+                    @chmod($dest, 0644);
+                    @chmod($pubDest, 0644);
+                    @chmod($distDest, 0644);
+                }
             }
         }
 

@@ -52,12 +52,20 @@ body {
 }
 
 #root {
-  overflow-x: clip !important;
+  overflow: visible !important;
   width: 100%;
   max-width: 100%;
   position: relative;
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+/* Site-wide Sticky Header - Guaranteed to stick across all browsers and iOS Safari */
+.site-sticky-header {
+  position: -webkit-sticky !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 50 !important;
 }
 
 /* Contain all horizontal scroll rows (Categories, Pills, Filter Chips) so they never shake or drag the body on iOS */

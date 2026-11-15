@@ -225,8 +225,8 @@ export default function Navbar() {
 
       {/* ================= MAIN HIGH-END STICKY HEADER ================= */}
       <header
-        className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
-        style={{ position: 'sticky', top: 0, zIndex: 40 }}
+        className="site-sticky-header sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
+        style={{ top: 0, zIndex: 50 }}
       >
         <div className="w-full max-w-[1800px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-12">
           <div className="flex items-center justify-between h-15 sm:h-17 gap-2 sm:gap-4">

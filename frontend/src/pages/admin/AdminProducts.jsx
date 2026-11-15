@@ -42,6 +42,7 @@ export default function AdminProducts() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [stockStatusFilter, setStockStatusFilter] = useState('');
   const [isFeaturedFilter, setIsFeaturedFilter] = useState('');
+  const [togglingId, setTogglingId] = useState(null);
   const [exporting, setExporting] = useState(false);
 
   // Modal State
@@ -398,7 +399,9 @@ export default function AdminProducts() {
 
   // Quick 1-click toggle for Featured status on Homepage
   const toggleFeatured = async (product) => {
-    const newFeatured = product.is_featured ? 0 : 1;
+    const isCurrentlyFeatured = Number(product.is_featured) === 1;
+    const newFeatured = isCurrentlyFeatured ? 0 : 1;
+    setTogglingId(product.id);
     try {
       const formData = new FormData();
       formData.append('is_featured', String(newFeatured));
@@ -431,6 +434,8 @@ export default function AdminProducts() {
         console.error('Failed fallback update:', err2);
         alert('Failed to update featured status.');
       }
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -730,6 +735,7 @@ export default function AdminProducts() {
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold border-b border-slate-100">
               <tr>
                 <th className="py-3.5 px-4">Book Details</th>
+                <th className="py-3.5 px-4 text-center">Featured</th>
                 <th className="py-3.5 px-4">Publisher</th>
                 <th className="py-3.5 px-4">Pricing</th>
                 <th className="py-3.5 px-4">Inventory</th>
@@ -741,14 +747,14 @@ export default function AdminProducts() {
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="py-16 text-center">
+                  <td colSpan="8" className="py-16 text-center">
                     <div className="w-7 h-7 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto" />
                     <p className="text-xs text-slate-400 font-semibold mt-2">Loading product catalog...</p>
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-16 text-center text-slate-400 space-y-2">
+                  <td colSpan="8" className="py-16 text-center text-slate-400 space-y-2">
                     <BookOpen className="w-8 h-8 text-slate-300 mx-auto" />
                     <p className="font-bold text-slate-700 text-sm">No books found matching search</p>
                   </td>
@@ -785,19 +791,6 @@ export default function AdminProducts() {
                               <span className="text-[10px] bg-slate-100 text-slate-600 font-mono font-bold px-1.5 py-0.5 rounded">
                                 #{p.id}
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => toggleFeatured(p)}
-                                title={p.is_featured ? "Click to remove from Homepage Featured" : "Click to mark as Homepage Featured"}
-                                className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold cursor-pointer transition-all ${
-                                  p.is_featured
-                                    ? 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100 shadow-2xs'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-700 border border-slate-200 hover:border-amber-200'
-                                }`}
-                              >
-                                <Sparkles className={`w-2.5 h-2.5 ${p.is_featured ? 'text-amber-600 fill-amber-500' : 'text-slate-400'}`} />
-                                <span>{p.is_featured ? 'Featured' : '+ Feature'}</span>
-                              </button>
                             </div>
 
                             {/* Category Tags with 1-click filter */}
@@ -830,6 +823,32 @@ export default function AdminProducts() {
                             )}
                           </div>
                         </div>
+                      </td>
+
+                      {/* Featured (1-Click Direct Toggle Checkbox) */}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <label
+                          className="inline-flex items-center gap-2 cursor-pointer select-none group"
+                          title={Number(p.is_featured) === 1 ? "Click to remove from Homepage Featured" : "Click to add to Homepage Featured"}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={Number(p.is_featured) === 1}
+                            disabled={togglingId === p.id}
+                            onChange={() => toggleFeatured(p)}
+                            className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 border-slate-300 cursor-pointer transition-all disabled:opacity-50"
+                          />
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-all ${
+                              Number(p.is_featured) === 1
+                                ? 'bg-amber-100/90 text-amber-800 border border-amber-300 shadow-2xs group-hover:bg-amber-200'
+                                : 'bg-slate-100 text-slate-500 border border-slate-200 group-hover:bg-slate-200 group-hover:text-slate-700'
+                            }`}
+                          >
+                            <Sparkles className={`w-3 h-3 ${Number(p.is_featured) === 1 ? 'text-amber-600 fill-amber-500' : 'text-slate-400'}`} />
+                            <span>{Number(p.is_featured) === 1 ? 'Featured' : 'Add to Feature'}</span>
+                          </span>
+                        </label>
                       </td>
 
                       {/* Publisher with 1-click filter */}

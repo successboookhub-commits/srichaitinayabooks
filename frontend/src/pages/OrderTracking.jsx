@@ -458,7 +458,7 @@ export default function OrderTracking() {
                                   />
                                 </div>
                                 <div className="min-w-0">
-                                  <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                                  <h4 className="text-xs sm:text-sm font-medium text-slate-800 truncate">
                                     {itemName}
                                   </h4>
                                   <p className="text-xs text-slate-500 font-mono">
@@ -681,7 +681,7 @@ export default function OrderTracking() {
                 {selectedOrder.items?.map((item, idx) => (
                   <div key={idx} className="py-2.5 flex justify-between items-center text-xs sm:text-sm">
                     <div>
-                      <p className="font-bold text-slate-900">{item.book_title || item.name || 'Book'}</p>
+                      <p className="font-medium text-slate-800">{item.book_title || item.name || 'Book'}</p>
                       <p className="text-xs text-slate-500 font-mono">Qty: {item.quantity} &times; ₹{item.price.toFixed(2)}</p>
                     </div>
                     <span className="font-extrabold text-slate-900">₹{(item.quantity * item.price).toFixed(2)}</span>

@@ -92,6 +92,7 @@ export default function Home() {
       {homeSections.length > 0 ? (
         homeSections.map((section) => {
           if (!section.products || section.products.length === 0) return null;
+          const isFeaturedSec = section.title && section.title.toLowerCase().includes('featured');
           return (
             <section key={section.id} className="space-y-4 sm:space-y-5 pt-1 sm:pt-2">
               <div className="flex items-center justify-between">
@@ -105,7 +106,7 @@ export default function Home() {
                   )}
                 </div>
                 <Link
-                  to="/shop"
+                  to={isFeaturedSec ? "/shop?featured=true" : "/shop"}
                   className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 group"
                 >
                   <span>See More</span>

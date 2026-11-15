@@ -127,7 +127,7 @@ export default function WishlistDrawer() {
                         <Link
                           to={item.slug ? `/product/${item.slug}` : `/product/${item.id}`}
                           onClick={() => setWishlistOpen(false)}
-                          className="font-extrabold text-xs text-slate-900 hover:text-red-600 line-clamp-2 leading-snug transition-colors"
+                          className="font-medium text-xs text-slate-800 hover:text-red-600 line-clamp-2 leading-snug transition-colors"
                         >
                           {item.name}
                         </Link>

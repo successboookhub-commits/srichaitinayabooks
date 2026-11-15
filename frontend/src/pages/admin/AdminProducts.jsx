@@ -395,6 +395,27 @@ export default function AdminProducts() {
     }
   };
 
+  // Quick 1-click toggle for Featured status on Homepage
+  const toggleFeatured = async (product) => {
+    const newFeatured = product.is_featured ? 0 : 1;
+    try {
+      const formData = new FormData();
+      formData.append('is_featured', String(newFeatured));
+      await api.post(`/products/${product.id}`, formData);
+      setProducts((prev) =>
+        prev.map((item) => (item.id === product.id ? { ...item, is_featured: newFeatured } : item))
+      );
+      setFeedback({
+        type: 'success',
+        text: `"${product.name || product.title}" is ${newFeatured ? 'now Featured on Homepage' : 'removed from Featured'}.`,
+      });
+      setTimeout(() => setFeedback({ type: '', text: '' }), 3500);
+    } catch (err) {
+      console.error('Failed to toggle featured:', err);
+      alert('Failed to update featured status.');
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto font-sans">
       
@@ -740,16 +761,24 @@ export default function AdminProducts() {
                             }}
                           />
                           <div className="min-w-0 max-w-xs">
-                            <p className="font-bold text-slate-900 line-clamp-2 leading-snug">{title}</p>
+                            <p className="font-medium text-slate-800 line-clamp-2 leading-snug">{title}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-[10px] bg-slate-100 text-slate-600 font-mono font-bold px-1.5 py-0.5 rounded">
                                 #{p.id}
                               </span>
-                              {p.is_featured ? (
-                                <span className="inline-flex items-center gap-0.5 text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
-                                  <Sparkles className="w-2.5 h-2.5" /> Featured
-                                </span>
-                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => toggleFeatured(p)}
+                                title={p.is_featured ? "Click to remove from Homepage Featured" : "Click to mark as Homepage Featured"}
+                                className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold cursor-pointer transition-all ${
+                                  p.is_featured
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100 shadow-2xs'
+                                    : 'bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-700 border border-slate-200 hover:border-amber-200'
+                                }`}
+                              >
+                                <Sparkles className={`w-2.5 h-2.5 ${p.is_featured ? 'text-amber-600 fill-amber-500' : 'text-slate-400'}`} />
+                                <span>{p.is_featured ? 'Featured' : '+ Feature'}</span>
+                              </button>
                             </div>
 
                             {/* Category Tags with 1-click filter */}

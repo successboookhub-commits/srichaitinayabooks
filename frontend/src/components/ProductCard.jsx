@@ -95,7 +95,7 @@ export default function ProductCard({ product }) {
       {/* Book Information & Bottom Price/Action */}
       <div className="p-2.5 sm:p-3.5 flex-1 flex flex-col justify-between bg-white">
         <div>
-          <h3 className="font-extrabold text-xs sm:text-[13px] text-slate-800 group-hover:text-red-600 transition-colors line-clamp-2 leading-snug min-h-[2rem] sm:min-h-[2.3rem]">
+          <h3 className="font-medium text-xs sm:text-[13px] text-slate-800 group-hover:text-red-600 transition-colors line-clamp-2 leading-snug min-h-[2rem] sm:min-h-[2.3rem]">
             {name}
           </h3>
 

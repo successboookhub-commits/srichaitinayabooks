@@ -56,7 +56,7 @@ export default function AdminOrderLabelPage() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
         <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs font-bold text-slate-500 mt-2">Preparing 9cm × 14cm Shipping Label...</p>
+        <p className="text-xs font-bold text-slate-500 mt-2">Preparing Shipping & Dispatch Label...</p>
       </div>
     );
   }

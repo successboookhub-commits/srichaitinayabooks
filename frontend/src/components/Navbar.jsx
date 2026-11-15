@@ -353,7 +353,7 @@ export default function Navbar() {
                             />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-slate-900 truncate group-hover:text-red-600">
+                            <p className="text-xs font-medium text-slate-800 truncate group-hover:text-red-600">
                               {item.name}
                             </p>
                             {item.publication_name && (
@@ -845,7 +845,7 @@ export default function Navbar() {
                         />
                       </div>
                       <div className="flex-1 min-w-0 space-y-1">
-                        <p className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug line-clamp-2">
+                        <p className="text-xs sm:text-sm font-medium text-slate-800 leading-snug line-clamp-2">
                           {item.name}
                         </p>
                         {item.publication_name && (

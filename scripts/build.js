@@ -19,6 +19,12 @@ if (!fs.existsSync(dist)) {
   fs.mkdirSync(dist, { recursive: true });
 }
 
+// Clean previous assets to prevent clutter
+const distAssets = path.join(dist, 'assets');
+const pubAssets = path.join(pub, 'assets');
+if (fs.existsSync(distAssets)) fs.rmSync(distAssets, { recursive: true, force: true });
+if (fs.existsSync(pubAssets)) fs.rmSync(pubAssets, { recursive: true, force: true });
+
 fs.cpSync(src, dist, { recursive: true });
 fs.cpSync(src, pub, { recursive: true });
 

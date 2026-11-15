@@ -431,7 +431,7 @@ export default function Checkout() {
               {cart.map((item) => (
                 <div key={item.id} className="py-3 first:pt-0 flex justify-between gap-3 text-xs">
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-gray-900 truncate">{item.name}</p>
+                    <p className="font-medium text-slate-800 truncate">{item.name}</p>
                     <p className="text-gray-400 mt-0.5">Qty: {item.qty} × ₹{item.price.toFixed(2)}</p>
                   </div>
                   <span className="font-bold text-gray-900 shrink-0">

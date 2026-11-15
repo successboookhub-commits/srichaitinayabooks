@@ -145,7 +145,7 @@ export default function CartDrawer() {
                 {/* Book Information */}
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-start justify-between gap-2">
-                    <h4 className="text-xs sm:text-[13px] font-extrabold text-slate-900 line-clamp-2 leading-snug">
+                    <h4 className="text-xs sm:text-[13px] font-medium text-slate-800 line-clamp-2 leading-snug">
                       {item.name}
                     </h4>
                     <button

@@ -126,7 +126,7 @@ export default function ProductDetail() {
           <span className="text-slate-300">/</span>
           <Link to="/shop" className="hover:text-red-600 transition-colors">Store</Link>
           <span className="text-slate-300">/</span>
-          <span className="text-slate-800 font-bold truncate max-w-[200px] sm:max-w-md">
+          <span className="text-slate-800 font-medium truncate max-w-[200px] sm:max-w-md">
             {product.name || product.title}
           </span>
         </nav>
@@ -217,9 +217,9 @@ export default function ProductDetail() {
                 </div>
               )}
 
-              {/* Title - slightly smaller & compact for single view */}
+              {/* Title - clean, simple, not bold */}
               <div>
-                <h1 className="text-xs sm:text-base lg:text-lg font-black text-slate-900 leading-snug tracking-tight line-clamp-2">
+                <h1 className="text-sm sm:text-base lg:text-lg font-medium text-slate-800 leading-snug tracking-tight line-clamp-2">
                   {product.name || product.title}
                 </h1>
               </div>

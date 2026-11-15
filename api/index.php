@@ -503,14 +503,29 @@ if ($path === 'home-sections') {
             }
         }
 
+        // Live query for active Featured Books (ordered strictly by latest added first: id DESC)
+        $liveFeaturedStmt = $pdo->query('SELECT * FROM products WHERE is_active = 1 AND is_featured = 1 ORDER BY id DESC LIMIT 24');
+        $liveFeaturedProducts = array_map('formatProduct', $liveFeaturedStmt->fetchAll());
+
         $sectionsOut = [];
+        $foundFeaturedSec = false;
+
         foreach ($customSections as $sec) {
+            $isFeaturedSec = (stripos($sec['title'], 'featured') !== false);
             $secProds = [];
-            foreach ($sec['product_ids'] as $pid) {
-                if (isset($productsMap[$pid])) {
-                    $secProds[] = $productsMap[$pid];
+
+            if ($isFeaturedSec) {
+                $foundFeaturedSec = true;
+                // Live dynamically featured products: newest added first (id DESC)
+                $secProds = $liveFeaturedProducts;
+            } else {
+                foreach ($sec['product_ids'] as $pid) {
+                    if (isset($productsMap[$pid])) {
+                        $secProds[] = $productsMap[$pid];
+                    }
                 }
             }
+
             $sectionsOut[] = [
                 'id'            => $sec['id'],
                 'title'         => $sec['title'],
@@ -519,6 +534,18 @@ if ($path === 'home-sections') {
                 'is_active'     => $sec['is_active'],
                 'products'      => $secProds,
             ];
+        }
+
+        // If no custom section with "Featured" in title exists, auto-prepend Featured Books section
+        if (!$foundFeaturedSec && !empty($liveFeaturedProducts)) {
+            array_unshift($sectionsOut, [
+                'id'            => 'auto_featured_section',
+                'title'         => 'Featured Study Materials',
+                'subtitle'      => 'Specially curated materials for competitive exams & top ranks.',
+                'display_order' => 0,
+                'is_active'     => 1,
+                'products'      => $liveFeaturedProducts,
+            ]);
         }
 
         // Fetch active products ONCE for all showcases (1 single indexed query instead of 110+ queries)

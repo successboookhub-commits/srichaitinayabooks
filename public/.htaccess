@@ -57,11 +57,15 @@ DirectoryIndex index.html index.php
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # Fallback for storage images: check both /storage and /public/storage
-    RewriteCond %{REQUEST_URI} ^/storage/(.*)$
-    RewriteCond %{DOCUMENT_ROOT}/storage/%1 !-f
-    RewriteCond %{DOCUMENT_ROOT}/public/storage/%1 -f
+    # Direct storage serving from storage, public/storage or dist/storage
+    RewriteCond %{DOCUMENT_ROOT}/storage/$1 -f
+    RewriteRule ^storage/(.*)$ /storage/$1 [L]
+
+    RewriteCond %{DOCUMENT_ROOT}/public/storage/$1 -f
     RewriteRule ^storage/(.*)$ /public/storage/$1 [L]
+
+    RewriteCond %{DOCUMENT_ROOT}/dist/storage/$1 -f
+    RewriteRule ^storage/(.*)$ /dist/storage/$1 [L]
 
     # Never rewrite image or media asset requests to index.html (prevents browsers from caching 200 HTML as image)
     RewriteCond %{REQUEST_URI} \.(jpe?g|png|webp|gif|svg|ico)$ [NC]

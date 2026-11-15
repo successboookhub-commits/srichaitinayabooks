@@ -62,6 +62,46 @@ if (($method === 'PUT' || $method === 'PATCH') && empty($_POST)) {
     }
 }
 
+// Helper to format book titles into clean Title Case while preserving standard exam acronyms
+function formatBookTitleCase($title) {
+    if (empty($title) || !is_string($title)) return $title ?: '';
+    
+    static $acronyms = [
+        'AP', 'TS', 'TG', 'APPSC', 'TGPSC', 'SI', 'PC', 'TET', 'DSC', 'RRB', 'NTPC',
+        'SSC', 'CGL', 'CHSL', 'GD', 'UPSC', 'IAS', 'IPS', 'IFS', 'PYQ', 'PYQS', 'MCQ',
+        'MCQS', 'GK', 'GS', 'TM', 'EM', 'PDF', 'TJR', 'AK', 'RC', 'ALP', 'CBSE', 'NCERT',
+        'SCERT', 'B.ED', 'D.ED', 'S.I.', 'D.NO'
+    ];
+    static $minorWords = ['and', 'or', 'for', 'of', 'in', 'on', 'at', 'to', 'by', 'with', 'the', 'a', 'an'];
+    
+    return preg_replace_callback('/[A-Za-z0-9]+(?:\'[A-Za-z]+)?/u', function($m) use ($acronyms, $minorWords) {
+        $word = $m[0];
+        
+        // Handle apostrophes like CHARY'S -> Chary's
+        if (strpos($word, "'") !== false) {
+            $parts = explode("'", $word, 2);
+            $base = in_array(strtoupper($parts[0]), $acronyms) ? strtoupper($parts[0]) : ucfirst(strtolower($parts[0]));
+            return $base . "'" . strtolower($parts[1]);
+        }
+        
+        $upper = strtoupper($word);
+        if (in_array($upper, $acronyms)) return $upper;
+        if (preg_match('/^(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)$/i', $word)) return $upper;
+        
+        // Numbers with suffix like 10MONTH -> 10 Month
+        if (preg_match('/^(\d+)([A-Za-z]+)$/', $word, $nm)) {
+            if (preg_match('/^(st|nd|rd|th)$/i', $nm[2])) {
+                return $nm[1] . strtolower($nm[2]);
+            }
+            return $nm[1] . ' ' . ucfirst(strtolower($nm[2]));
+        }
+        
+        if (is_numeric($word)) return $word;
+        
+        return ucfirst(strtolower($word));
+    }, trim($title));
+}
+
 // Helper to normalize product record for frontend
 function formatProduct($p) {
     $categoryIds = [];
@@ -84,8 +124,11 @@ function formatProduct($p) {
         }
     }
 
+    $formattedName = formatBookTitleCase($p['name'] ?? $p['title'] ?? '');
+
     return array_merge($p, [
-        'title'           => $p['name'] ?? $p['title'] ?? '',
+        'name'            => $formattedName,
+        'title'           => $formattedName,
         'price'           => $p['total_price'] ?? $p['price'] ?? 0,
         'stock'           => $p['quantity'] ?? $p['stock'] ?? 0,
         'image'           => $p['main_photo'] ?? $p['image'] ?? '',
@@ -296,6 +339,12 @@ if ($path === 'banners' || $path === 'banners/admin') {
             if (!is_dir(dirname($dest))) mkdir(dirname($dest), 0777, true);
             if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
                 $imagePath = 'banners/' . $fname;
+                $pubDest = dirname(__DIR__) . '/public/storage/banners/' . $fname;
+                $distDest = dirname(__DIR__) . '/dist/storage/banners/' . $fname;
+                if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
+                if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
+                @copy($dest, $pubDest);
+                @copy($dest, $distDest);
             }
         }
         if (!$imagePath) {
@@ -442,18 +491,15 @@ if (preg_match('#^publications/(\d+)$#', $path, $m)) {
 }
 
 // -------------------------------------------------------------
-// 4. HOME SECTIONS & STORE SETTINGS (Ultra-Fast Cached Pipeline)
+// 4. HOME SECTIONS & STORE SETTINGS (Live Real-Time Pipeline)
 // -------------------------------------------------------------
 if ($path === 'home-sections') {
     if ($method === 'GET') {
-        $cacheFile = sys_get_temp_dir() . '/sc_home_sections_v2.json';
-        if (empty($_GET['nocache']) && file_exists($cacheFile) && (time() - filemtime($cacheFile) < 180)) {
-            header('Content-Type: application/json');
-            header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
-            header('X-Cache: HIT');
-            readfile($cacheFile);
-            exit;
-        }
+        // Strict no-cache headers so browser always gets the true live database state
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
 
         // Default settings
         $settings = [
@@ -517,6 +563,7 @@ if ($path === 'home-sections') {
             if ($isFeaturedSec) {
                 $foundFeaturedSec = true;
                 // Live dynamically featured products: newest added first (id DESC)
+                // Filter strictly: only products where is_featured = 1 AND is_active = 1
                 $secProds = $liveFeaturedProducts;
             } else {
                 foreach ($sec['product_ids'] as $pid) {
@@ -627,11 +674,10 @@ if ($path === 'home-sections') {
         ];
 
         $jsonOut = json_encode($resData);
-        @file_put_contents($cacheFile, $jsonOut);
 
         header('Content-Type: application/json');
-        header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
-        header('X-Cache: MISS');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
         echo $jsonOut;
         exit;
     }
@@ -808,24 +854,6 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         $featured = $_GET['featured'] ?? $_GET['is_featured'] ?? null;
         $stockStatus = $_GET['stock_status'] ?? null;
 
-        // Ultra-Fast Disk Cache for common public queries (Featured & Recent products)
-        $cacheCandidateFile = null;
-        if (!$isAdmin && empty($search) && empty($publicationId) && empty($categoryId) && empty($stockStatus) && $page === 1) {
-            if (($featured === '1' || $featured === 'true') && $limit == 12) {
-                $cacheCandidateFile = sys_get_temp_dir() . '/sc_products_featured.json';
-            } elseif (($featured === null || $featured === '') && $limit == 12) {
-                $cacheCandidateFile = sys_get_temp_dir() . '/sc_products_recent.json';
-            }
-        }
-
-        if ($cacheCandidateFile && empty($_GET['nocache']) && file_exists($cacheCandidateFile) && (time() - filemtime($cacheCandidateFile) < 180)) {
-            header('Content-Type: application/json');
-            header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
-            header('X-Cache: HIT');
-            readfile($cacheCandidateFile);
-            exit;
-        }
-
         $sql = "SELECT p.*, pub.name AS publication_name FROM products p LEFT JOIN publications pub ON p.publication_id = pub.id WHERE 1=1";
         $params = [];
 
@@ -907,10 +935,9 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
             'count'      => count($formatted),
             'products'   => $formatted,
         ]);
-        if (!empty($cacheCandidateFile)) {
-            @file_put_contents($cacheCandidateFile, $out);
-            header('Cache-Control: public, max-age=60, stale-while-revalidate=180');
-        }
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
         echo $out;
         exit;
     }
@@ -953,6 +980,12 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
             if (!is_dir(dirname($dest))) mkdir(dirname($dest), 0777, true);
             if (move_uploaded_file($f['tmp_name'], $dest)) {
                 $imagePath = 'products/' . $fname;
+                $pubDest = dirname(__DIR__) . '/public/storage/products/' . $fname;
+                $distDest = dirname(__DIR__) . '/dist/storage/products/' . $fname;
+                if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
+                if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
+                @copy($dest, $pubDest);
+                @copy($dest, $distDest);
             }
         }
         if (!$imagePath) {
@@ -971,6 +1004,45 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         echo json_encode(['success' => true, 'message' => 'Product added successfully.', 'id' => $pdo->lastInsertId()]);
         exit;
     }
+}
+
+// 1-Click Feature Toggle Endpoint (Atomic & Real-Time Sync)
+if (preg_match('#^products/(?:admin/)?(\d+)/toggle-featured$#', $path, $m) && ($method === 'POST' || $method === 'PUT')) {
+    $id = intval($m[1]);
+    $newVal = isset($_POST['is_featured']) ? intval($_POST['is_featured']) : (isset($body['is_featured']) ? intval($body['is_featured']) : null);
+    
+    if ($newVal !== null) {
+        $stmt = $pdo->prepare('UPDATE products SET is_featured = ?, updated_at = NOW() WHERE id = ?');
+        $stmt->execute([$newVal, $id]);
+    } else {
+        $stmt = $pdo->prepare('UPDATE products SET is_featured = CASE WHEN is_featured = 1 THEN 0 ELSE 1 END, updated_at = NOW() WHERE id = ?');
+        $stmt->execute([$id]);
+    }
+    
+    $currFeat = intval($pdo->query("SELECT is_featured FROM products WHERE id = $id")->fetchColumn());
+    
+    // Also synchronize home_sections table product_ids
+    try {
+        $secStmt = $pdo->query("SELECT id, product_ids FROM home_sections WHERE LOWER(title) LIKE '%featured%'");
+        while ($sec = $secStmt->fetch()) {
+            $pids = json_decode($sec['product_ids'], true) ?: [];
+            if ($currFeat === 0) {
+                $pids = array_values(array_filter($pids, fn($pid) => intval($pid) !== $id));
+            } else {
+                if (!in_array($id, $pids)) {
+                    array_unshift($pids, $id);
+                }
+            }
+            $upSec = $pdo->prepare('UPDATE home_sections SET product_ids = ?, updated_at = NOW() WHERE id = ?');
+            $upSec->execute([json_encode($pids), $sec['id']]);
+        }
+    } catch (\Throwable $e) {}
+
+    clearStoreCache();
+    header('Content-Type: application/json');
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    echo json_encode(['success' => true, 'id' => $id, 'is_featured' => $currFeat]);
+    exit;
 }
 
 // Update / Delete Product (PUT/POST/DELETE on /products/:id or /products/admin/:id)
@@ -1067,6 +1139,12 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
             if (!is_dir(dirname($dest))) mkdir(dirname($dest), 0777, true);
             if (move_uploaded_file($f['tmp_name'], $dest)) {
                 $imagePath = 'products/' . $fname;
+                $pubDest = dirname(__DIR__) . '/public/storage/products/' . $fname;
+                $distDest = dirname(__DIR__) . '/dist/storage/products/' . $fname;
+                if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
+                if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
+                @copy($dest, $pubDest);
+                @copy($dest, $distDest);
             }
         }
 
@@ -1087,6 +1165,23 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
                 $stmt->execute([$name, $price, $oldPrice, $discount, $stock, $publicationId, $categoryIds, $description, $weight, $shippingCharge, $isWeightless, $isFeatured, $isActive, $id]);
             }
         }
+        // Synchronize home_sections table product_ids
+        try {
+            $secStmt = $pdo->query("SELECT id, product_ids FROM home_sections WHERE LOWER(title) LIKE '%featured%'");
+            while ($sec = $secStmt->fetch()) {
+                $pids = json_decode($sec['product_ids'], true) ?: [];
+                if ($isFeatured === 0) {
+                    $pids = array_values(array_filter($pids, fn($pid) => intval($pid) !== $id));
+                } else {
+                    if (!in_array($id, $pids)) {
+                        array_unshift($pids, $id);
+                    }
+                }
+                $upSec = $pdo->prepare('UPDATE home_sections SET product_ids = ?, updated_at = NOW() WHERE id = ?');
+                $upSec->execute([json_encode($pids), $sec['id']]);
+            }
+        } catch (\Throwable $e) {}
+
         clearStoreCache();
         echo json_encode(['success' => true, 'message' => 'Product updated successfully.']);
         exit;

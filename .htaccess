@@ -31,6 +31,16 @@ DirectoryIndex index.html index.php
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
+    # Direct static storage serving
+    RewriteCond %{DOCUMENT_ROOT}/storage/$1 -f
+    RewriteRule ^storage/(.*)$ storage/$1 [L]
+
+    RewriteCond %{DOCUMENT_ROOT}/public/storage/$1 -f
+    RewriteRule ^storage/(.*)$ public/storage/$1 [L]
+
+    RewriteCond %{DOCUMENT_ROOT}/dist/storage/$1 -f
+    RewriteRule ^storage/(.*)$ dist/storage/$1 [L]
+
     # 3. Static uploads, storage, and assets
     RewriteCond %{DOCUMENT_ROOT}/dist/$1 -f
     RewriteRule ^(.*)$ dist/$1 [L]

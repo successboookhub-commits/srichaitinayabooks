@@ -28,18 +28,36 @@ if (fs.existsSync(pubAssets)) fs.rmSync(pubAssets, { recursive: true, force: tru
 fs.cpSync(src, dist, { recursive: true });
 fs.cpSync(src, pub, { recursive: true });
 
-// Copy API engine into dist
+// Copy API engine into dist and public
+const rootApi = path.join(__dirname, '..', 'api');
 const pubApi = path.join(pub, 'api');
 const distApi = path.join(dist, 'api');
-if (fs.existsSync(pubApi)) {
+if (fs.existsSync(rootApi)) {
+  fs.cpSync(rootApi, distApi, { recursive: true });
+  fs.cpSync(rootApi, pubApi, { recursive: true });
+} else if (fs.existsSync(pubApi)) {
   fs.cpSync(pubApi, distApi, { recursive: true });
 }
 
-// Copy storage (323 book cover photos and banners) into dist
+// Synchronize public storage subdirectories (products, banners, invoices)
 const pubStorage = path.join(pub, 'storage');
 const distStorage = path.join(dist, 'storage');
-if (fs.existsSync(pubStorage)) {
-  fs.cpSync(pubStorage, distStorage, { recursive: true });
+const rootStorage = path.join(__dirname, '..', 'storage');
+const storageSubdirs = ['products', 'banners', 'invoices'];
+
+for (const sub of storageSubdirs) {
+  const pSub = path.join(pubStorage, sub);
+  const dSub = path.join(distStorage, sub);
+  const rSub = path.join(rootStorage, sub);
+
+  if (fs.existsSync(pSub)) {
+    fs.cpSync(pSub, dSub, { recursive: true });
+    fs.cpSync(pSub, rSub, { recursive: true });
+  }
+  if (fs.existsSync(rSub)) {
+    fs.cpSync(rSub, pSub, { recursive: true });
+    fs.cpSync(rSub, dSub, { recursive: true });
+  }
 }
 
 // Copy .htaccess into dist so LiteSpeed / Apache routes /api and SPA

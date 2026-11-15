@@ -149,7 +149,14 @@ export const getImageUrl = (imagePath) => {
       const urlObj = new URL(secureUrl);
       urlObj.pathname = urlObj.pathname
         .split('/')
-        .map((seg) => encodeURIComponent(decodeURIComponent(seg)))
+        .map((seg) => {
+          if (!seg) return '';
+          try {
+            return encodeURIComponent(decodeURIComponent(seg));
+          } catch {
+            return encodeURIComponent(seg);
+          }
+        })
         .join('/');
       return urlObj.toString();
     } catch {
@@ -159,15 +166,16 @@ export const getImageUrl = (imagePath) => {
 
   let cleanPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
 
-  // 2. Normalize and strip redundant prefix if present
-  if (cleanPath.startsWith('storage/')) {
-    cleanPath = cleanPath.slice(8);
+  // 2. Normalize and strip redundant prefixes if present
+  while (cleanPath.startsWith('public/') || cleanPath.startsWith('storage/')) {
+    if (cleanPath.startsWith('public/')) cleanPath = cleanPath.slice(7);
+    if (cleanPath.startsWith('storage/')) cleanPath = cleanPath.slice(8);
   }
 
   let fullPath = '';
   if (cleanPath.startsWith('images/')) {
     fullPath = `/${cleanPath}`;
-  } else if (cleanPath.startsWith('products/') || cleanPath.startsWith('banners/') || cleanPath.startsWith('uploads/')) {
+  } else if (cleanPath.startsWith('products/') || cleanPath.startsWith('banners/') || cleanPath.startsWith('uploads/') || cleanPath.startsWith('invoices/')) {
     fullPath = SERVER_URL ? `${SERVER_URL}/storage/${cleanPath}` : `/storage/${cleanPath}`;
   } else {
     fullPath = SERVER_URL ? `${SERVER_URL}/storage/products/${cleanPath}` : `/storage/products/${cleanPath}`;
@@ -176,7 +184,14 @@ export const getImageUrl = (imagePath) => {
   // 3. Encode every segment safely to ensure filenames with spaces, parentheses, etc. load on all mobile browsers
   return fullPath
     .split('/')
-    .map((seg) => encodeURIComponent(decodeURIComponent(seg)))
+    .map((seg) => {
+      if (!seg) return '';
+      try {
+        return encodeURIComponent(decodeURIComponent(seg));
+      } catch {
+        return encodeURIComponent(seg);
+      }
+    })
     .join('/');
 };
 

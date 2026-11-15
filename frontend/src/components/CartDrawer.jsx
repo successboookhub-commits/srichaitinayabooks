@@ -137,16 +137,23 @@ export default function CartDrawer() {
                 <img
                   src={getImageUrl(item.image)}
                   alt={item.name}
-                  decoding="async"
                   className="w-16 h-22 sm:w-18 sm:h-24 object-contain rounded-xl bg-slate-50 border border-slate-200/80 p-1 shrink-0 shadow-2xs"
                   onError={(e) => {
-                    const currentSrc = e.currentTarget.getAttribute('src') || '';
-                    if (currentSrc.startsWith('/storage/') && !e.currentTarget.dataset.retried) {
-                      e.currentTarget.dataset.retried = '1';
-                      e.currentTarget.src = currentSrc.replace('/storage/', '/public/storage/');
+                    const target = e.currentTarget;
+                    const currentSrc = target.getAttribute('src') || target.src || '';
+                    const retries = Number(target.dataset.retries || 0);
+                    if (retries === 0 && currentSrc.includes('/storage/')) {
+                      target.dataset.retries = '1';
+                      target.src = currentSrc.replace('/storage/', '/public/storage/');
                       return;
                     }
-                    e.currentTarget.src = '/images/ebook_logo.png';
+                    if (retries === 1 && currentSrc.includes('/public/storage/')) {
+                      target.dataset.retries = '2';
+                      target.src = currentSrc.replace('/public/storage/', '/dist/storage/');
+                      return;
+                    }
+                    target.onerror = null;
+                    target.src = '/images/ebook_logo.png';
                   }}
                 />
 

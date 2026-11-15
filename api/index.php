@@ -339,6 +339,12 @@ if ($path === 'banners' || $path === 'banners/admin') {
             if (!is_dir(dirname($dest))) mkdir(dirname($dest), 0777, true);
             if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
                 $imagePath = 'banners/' . $fname;
+                $pubDest = dirname(__DIR__) . '/public/storage/banners/' . $fname;
+                $distDest = dirname(__DIR__) . '/dist/storage/banners/' . $fname;
+                if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
+                if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
+                @copy($dest, $pubDest);
+                @copy($dest, $distDest);
             }
         }
         if (!$imagePath) {
@@ -974,6 +980,12 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
             if (!is_dir(dirname($dest))) mkdir(dirname($dest), 0777, true);
             if (move_uploaded_file($f['tmp_name'], $dest)) {
                 $imagePath = 'products/' . $fname;
+                $pubDest = dirname(__DIR__) . '/public/storage/products/' . $fname;
+                $distDest = dirname(__DIR__) . '/dist/storage/products/' . $fname;
+                if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
+                if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
+                @copy($dest, $pubDest);
+                @copy($dest, $distDest);
             }
         }
         if (!$imagePath) {
@@ -1127,6 +1139,12 @@ if (preg_match('#^products/(admin/)?(\d+)$#', $path, $m)) {
             if (!is_dir(dirname($dest))) mkdir(dirname($dest), 0777, true);
             if (move_uploaded_file($f['tmp_name'], $dest)) {
                 $imagePath = 'products/' . $fname;
+                $pubDest = dirname(__DIR__) . '/public/storage/products/' . $fname;
+                $distDest = dirname(__DIR__) . '/dist/storage/products/' . $fname;
+                if (!is_dir(dirname($pubDest))) @mkdir(dirname($pubDest), 0777, true);
+                if (!is_dir(dirname($distDest))) @mkdir(dirname($distDest), 0777, true);
+                @copy($dest, $pubDest);
+                @copy($dest, $distDest);
             }
         }
 

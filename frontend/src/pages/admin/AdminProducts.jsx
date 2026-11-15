@@ -433,6 +433,10 @@ export default function AdminProducts() {
       formData.append('description', product.description || '');
       formData.append('is_featured', newFeatured ? '1' : '0');
       formData.append('is_active', product.is_active !== undefined ? (product.is_active ? '1' : '0') : '1');
+      if (product.main_photo || product.image) {
+        formData.append('main_photo', product.main_photo || product.image);
+        formData.append('image', product.main_photo || product.image);
+      }
 
       // 3. Post to the standard product update endpoint (100% proven reliable)
       await api.post(`/products/${product.id}`, formData, {
@@ -812,7 +816,21 @@ export default function AdminProducts() {
                             alt={title}
                             className="w-11 h-14 object-cover rounded-xl border border-slate-200 bg-slate-50 shrink-0 shadow-2xs"
                             onError={(e) => {
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=150';
+                              const target = e.currentTarget;
+                              const currentSrc = target.getAttribute('src') || target.src || '';
+                              const retries = Number(target.dataset.retries || 0);
+                              if (retries === 0 && currentSrc.includes('/storage/')) {
+                                target.dataset.retries = '1';
+                                target.src = currentSrc.replace('/storage/', '/public/storage/');
+                                return;
+                              }
+                              if (retries === 1 && currentSrc.includes('/public/storage/')) {
+                                target.dataset.retries = '2';
+                                target.src = currentSrc.replace('/public/storage/', '/dist/storage/');
+                                return;
+                              }
+                              target.onerror = null;
+                              target.src = '/images/ebook_logo.png';
                             }}
                           />
                           <div className="min-w-0 max-w-xs">

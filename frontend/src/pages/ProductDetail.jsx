@@ -154,7 +154,28 @@ export default function ProductDetail() {
                             : 'border-slate-200 hover:border-slate-400 opacity-70 hover:opacity-100'
                         }`}
                       >
-                        <img src={getImageUrl(img)} alt="thumb" className="w-full h-full object-contain" />
+                        <img
+                          src={getImageUrl(img)}
+                          alt="thumb"
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            const currentSrc = target.getAttribute('src') || target.src || '';
+                            const retries = Number(target.dataset.retries || 0);
+                            if (retries === 0 && currentSrc.includes('/storage/')) {
+                              target.dataset.retries = '1';
+                              target.src = currentSrc.replace('/storage/', '/public/storage/');
+                              return;
+                            }
+                            if (retries === 1 && currentSrc.includes('/public/storage/')) {
+                              target.dataset.retries = '2';
+                              target.src = currentSrc.replace('/public/storage/', '/dist/storage/');
+                              return;
+                            }
+                            target.onerror = null;
+                            target.src = '/images/ebook_logo.png';
+                          }}
+                        />
                       </button>
                     ))}
                   </div>
@@ -165,16 +186,23 @@ export default function ProductDetail() {
                   <img
                     src={getImageUrl(activeImage)}
                     alt={product.name || product.title}
-                    decoding="async"
                     className="w-full h-full max-h-[195px] sm:max-h-[280px] lg:max-h-[330px] object-contain drop-shadow-sm group-hover:scale-102 transition-transform duration-300"
                     onError={(e) => {
-                      const currentSrc = e.currentTarget.getAttribute('src') || '';
-                      if (currentSrc.startsWith('/storage/') && !e.currentTarget.dataset.retried) {
-                        e.currentTarget.dataset.retried = '1';
-                        e.currentTarget.src = currentSrc.replace('/storage/', '/public/storage/');
+                      const target = e.currentTarget;
+                      const currentSrc = target.getAttribute('src') || target.src || '';
+                      const retries = Number(target.dataset.retries || 0);
+                      if (retries === 0 && currentSrc.includes('/storage/')) {
+                        target.dataset.retries = '1';
+                        target.src = currentSrc.replace('/storage/', '/public/storage/');
                         return;
                       }
-                      e.currentTarget.src = '/images/ebook_logo.png';
+                      if (retries === 1 && currentSrc.includes('/public/storage/')) {
+                        target.dataset.retries = '2';
+                        target.src = currentSrc.replace('/public/storage/', '/dist/storage/');
+                        return;
+                      }
+                      target.onerror = null;
+                      target.src = '/images/ebook_logo.png';
                     }}
                   />
 

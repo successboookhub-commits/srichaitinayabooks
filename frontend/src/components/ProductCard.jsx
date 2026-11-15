@@ -49,16 +49,24 @@ export default function ProductCard({ product }) {
           src={getImageUrl(image)}
           alt={name}
           loading="lazy"
-          decoding="async"
           className="w-full h-full object-contain group-hover:scale-103 transition-transform duration-300 filter drop-shadow-xs"
           onError={(e) => {
-            const currentSrc = e.currentTarget.getAttribute('src') || '';
-            if (currentSrc.startsWith('/storage/') && !e.currentTarget.dataset.retried) {
-              e.currentTarget.dataset.retried = '1';
-              e.currentTarget.src = currentSrc.replace('/storage/', '/public/storage/');
+            const target = e.currentTarget;
+            const currentSrc = target.getAttribute('src') || target.src || '';
+            const retries = Number(target.dataset.retries || 0);
+
+            if (retries === 0 && currentSrc.includes('/storage/')) {
+              target.dataset.retries = '1';
+              target.src = currentSrc.replace('/storage/', '/public/storage/');
               return;
             }
-            e.currentTarget.src = '/images/ebook_logo.png';
+            if (retries === 1 && currentSrc.includes('/public/storage/')) {
+              target.dataset.retries = '2';
+              target.src = currentSrc.replace('/public/storage/', '/dist/storage/');
+              return;
+            }
+            target.onerror = null;
+            target.src = '/images/ebook_logo.png';
           }}
         />
 

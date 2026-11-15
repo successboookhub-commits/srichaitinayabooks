@@ -232,8 +232,8 @@ export default function AdminOrderLabel({ orders, onClose }) {
               type="button"
               onClick={() => setPaperSize(cfg.id)}
               className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer shrink-0 ${paperSize === cfg.id
-                ? 'bg-red-600 text-white border-red-600 shadow-xs'
-                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
             >
               {cfg.name}

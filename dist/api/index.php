@@ -1562,7 +1562,8 @@ if ($path === 'auth/profile' && $method === 'PUT') {
 // Uses Exact Same Dispatch Slip / Shipping Label Layout as Print
 // Strictly 5 Books per page with multi-page overflow and no barcode
 // =============================================================
-function createNativeInvoicePdf($order, $items, $savePath) {
+function createNativeInvoicePdf($order, $items, $savePath, $size = 'a4') {
+    $size = strtolower(trim($size ?: 'a4'));
     $orderCode = $order['order_code'] ?? ('ORD' . ($order['id'] ?? '000'));
     $orderDate = !empty($order['created_at']) ? date('d M Y', strtotime($order['created_at'])) : date('d M Y');
     $custName = !empty($order['customer_name']) ? strtoupper($order['customer_name']) : 'CUSTOMER';
@@ -1597,103 +1598,195 @@ function createNativeInvoicePdf($order, $items, $savePath) {
     $sPincode = $esc($pincode);
     $sPayment = $esc(strtoupper($orderPayment));
 
-    // Chunk items strictly into max 5 books per page
-    $chunks = !empty($items) ? array_chunk($items, 5) : [[]];
-    $totalChunks = count($chunks);
+    // SMART PAGE SPLIT:
+    // Page 1: exactly first 5 books with full TO and FROM address
+    // Page 2+: remaining books (chunks of up to 10 books) with NO TO/FROM address!
+    $pages = [];
+    if (count($items) <= 5) {
+        $pages[] = [
+            'isFirstPage' => true,
+            'items' => $items,
+            'startBookNo' => 1,
+        ];
+    } else {
+        $pages[] = [
+            'isFirstPage' => true,
+            'items' => array_slice($items, 0, 5),
+            'startBookNo' => 1,
+        ];
+        $remaining = array_slice($items, 5);
+        $remChunks = array_chunk($remaining, 10);
+        foreach ($remChunks as $rIdx => $rChunk) {
+            $pages[] = [
+                'isFirstPage' => false,
+                'items' => $rChunk,
+                'startBookNo' => 6 + ($rIdx * 10),
+            ];
+        }
+    }
+    $totalPages = count($pages);
+    $totalCount = count($items);
 
     $pageStreams = [];
 
-    foreach ($chunks as $chunkIdx => $chunkItems) {
-        $pageNo = $chunkIdx + 1;
-        $pageBadge = ($totalChunks > 1) ? " (Page {$pageNo} of {$totalChunks})" : "";
+    // Dimensions setup based on paper size
+    $isLegal = ($size === 'legal');
+    $cardTopY = $isLegal ? 940 : 785;
+    $cardBotY = 60;
+    $cardHeight = $cardTopY - $cardBotY; // 880 on legal, 725 on A4
+    $cardRightX = $isLegal ? 565 : 550;
+    $cardLeftX = 45;
+    $cardWidth = $cardRightX - $cardLeftX;
+
+    foreach ($pages as $pIdx => $page) {
+        $pageNo = $pIdx + 1;
+        $isFirstPage = $page['isFirstPage'];
+        $chunkItems = $page['items'];
+        $startBookNo = $page['startBookNo'];
+        $endBookNo = $startBookNo + count($chunkItems) - 1;
+        $pageBadge = ($totalPages > 1) ? " (Page {$pageNo} of {$totalPages})" : "";
 
         $stream = "q\n0 0 0 RG\n";
 
         // Outer rectangular card border
-        $stream .= "2.5 w 45 60 505 725 re S\n";
+        $stream .= "2.5 w {$cardLeftX} {$cardBotY} {$cardWidth} {$cardHeight} re S\n";
 
-        // 1. HEADER (BRAND & SHIPPING LABEL)
-        $stream .= "0 0 0 rg\n";
-        $stream .= "BT /F2 17 Tf 165 760 Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
-        $stream .= "BT /F2 14 Tf 210 740 Td (SHIPPING LABEL{$pageBadge}) Tj ET\n";
-        $stream .= "2 w 45 730 m 550 730 l S\n";
+        if ($isFirstPage) {
+            // ================= PAGE 1: FULL SHIPPING LABEL =================
+            // 1. HEADER (BRAND & SHIPPING LABEL)
+            $stream .= "0 0 0 rg\n";
+            $stream .= "BT /F2 17 Tf 165 " . ($cardTopY - 25) . " Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
+            $stream .= "BT /F2 14 Tf 210 " . ($cardTopY - 45) . " Td (SHIPPING LABEL{$pageBadge}) Tj ET\n";
+            $stream .= "2 w {$cardLeftX} " . ($cardTopY - 55) . " m {$cardRightX} " . ($cardTopY - 55) . " l S\n";
 
-        // 2. TO: SECTION
-        $stream .= "BT /F2 12 Tf 60 714 Td (TO:) Tj ET\n";
-        $stream .= "BT /F2 17 Tf 60 694 Td ({$sCustName}) Tj ET\n";
-        $stream .= "BT /F2 15 Tf 60 675 Td (TEL / MOB: {$sCustPhone}) Tj ET\n";
+            // 2. TO: SECTION
+            $stream .= "BT /F2 12 Tf 60 " . ($cardTopY - 71) . " Td (TO:) Tj ET\n";
+            $stream .= "BT /F2 17 Tf 60 " . ($cardTopY - 91) . " Td ({$sCustName}) Tj ET\n";
+            $stream .= "BT /F2 15 Tf 60 " . ($cardTopY - 110) . " Td (TEL / MOB: {$sCustPhone}) Tj ET\n";
 
-        $curAddrY = 656;
-        foreach ($addressLines as $al) {
-            $cAl = $esc(substr($al, 0, 75));
-            $stream .= "BT /F1 13.5 Tf 60 {$curAddrY} Td ({$cAl}) Tj ET\n";
-            $curAddrY -= 17;
-        }
-        $stream .= "BT /F1 13.5 Tf 60 {$curAddrY} Td ({$esc($state)} - {$sPincode}) Tj ET\n";
-
-        // Dashed line before PIN CODE
-        $stream .= "[3 2] 0 d 0.75 w 60 605 m 535 605 l S [] 0 d\n";
-        $stream .= "BT /F2 14 Tf 60 585 Td (PIN CODE:) Tj ET\n";
-        $stream .= "BT /F2 22 Tf 435 585 Td ({$sPincode}) Tj ET\n";
-        $stream .= "2 w 45 565 m 550 565 l S\n";
-
-        // 3. FROM: SECTION
-        $stream .= "BT /F2 12 Tf 60 549 Td (FROM:) Tj ET\n";
-        $stream .= "BT /F2 15 Tf 60 531 Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
-        $stream .= "BT /F1 12.5 Tf 60 514 Td (Konark Theatre Ln, opposite ICICI ATM,) Tj ET\n";
-        $stream .= "BT /F1 12.5 Tf 60 498 Td (Gaddiannaram, Madhura Puri Colony,) Tj ET\n";
-        $stream .= "BT /F1 12.5 Tf 60 482 Td (Dilsukhnagar, Hyderabad, Telangana - 500060) Tj ET\n";
-        $stream .= "BT /F2 13.5 Tf 60 462 Td (TEL / HELPLINE: 09177110134) Tj ET\n";
-        $stream .= "2 w 45 448 m 550 448 l S\n";
-
-        // 4. ORDER ID & PAYMENT STRIP
-        $stream .= "BT /F2 14 Tf 60 426 Td (Order ID: {$sOrderCode}) Tj ET\n";
-        $stream .= "BT /F2 14 Tf 420 426 Td (Payment: {$sPayment}) Tj ET\n";
-        $stream .= "2 w 45 412 m 550 412 l S\n";
-
-        // 5. ITEM DETAILS (MAX 5 BOOKS)
-        $stream .= "BT /F2 12 Tf 60 395 Td (ITEM DETAILS{$pageBadge}:) Tj ET\n";
-        $stream .= "BT /F2 11.5 Tf 60 378 Td (PRODUCT) Tj ET\n";
-        $stream .= "BT /F2 11.5 Tf 505 378 Td (QTY) Tj ET\n";
-        $stream .= "1 w 60 371 m 535 371 l S\n";
-
-        $curBookY = 350;
-        foreach ($chunkItems as $itemIdx => $it) {
-            $bookNum = ($chunkIdx * 5) + $itemIdx + 1;
-            $rawTitle = $it['product_name'] ?? 'Competitive Examination Book';
-            $cleanTitle = preg_replace('/\.{2,}$/', '', trim($rawTitle));
-            $formattedTitle = formatBookTitleCase($cleanTitle);
-            $fullTitle = "{$bookNum}. {$formattedTitle}";
-
-            $t1 = $esc(substr($fullTitle, 0, 52));
-            $t2 = (strlen($fullTitle) > 52) ? $esc(substr($fullTitle, 52, 52)) : '';
-            $qty = intval($it['qty'] ?? 1);
-
-            $stream .= "BT /F2 12 Tf 60 {$curBookY} Td ({$t1}) Tj ET\n";
-            if ($t2 !== '') {
-                $curBookY -= 14;
-                $stream .= "BT /F2 12 Tf 75 {$curBookY} Td ({$t2}) Tj ET\n";
+            $curAddrY = $cardTopY - 129;
+            foreach ($addressLines as $al) {
+                $cAl = $esc(substr($al, 0, 75));
+                $stream .= "BT /F1 13.5 Tf 60 {$curAddrY} Td ({$cAl}) Tj ET\n";
+                $curAddrY -= 17;
             }
-            $stream .= "BT /F2 14 Tf 515 {$curBookY} Td ({$qty}) Tj ET\n";
+            $stream .= "BT /F1 13.5 Tf 60 {$curAddrY} Td ({$esc($state)} - {$sPincode}) Tj ET\n";
 
-            $curBookY -= 10;
-            $stream .= "[2 2] 0 d 0.5 w 60 {$curBookY} m 535 {$curBookY} l S [] 0 d\n";
-            $curBookY -= 14;
+            // Dashed line before PIN CODE
+            $stream .= "[3 2] 0 d 0.75 w 60 " . ($cardTopY - 180) . " m " . ($cardRightX - 15) . " " . ($cardTopY - 180) . " l S [] 0 d\n";
+            $stream .= "BT /F2 14 Tf 60 " . ($cardTopY - 200) . " Td (PIN CODE:) Tj ET\n";
+            $stream .= "BT /F2 22 Tf " . ($cardRightX - 115) . " " . ($cardTopY - 200) . " Td ({$sPincode}) Tj ET\n";
+            $stream .= "2 w {$cardLeftX} " . ($cardTopY - 220) . " m {$cardRightX} " . ($cardTopY - 220) . " l S\n";
+
+            // 3. FROM: SECTION
+            $stream .= "BT /F2 12 Tf 60 " . ($cardTopY - 236) . " Td (FROM:) Tj ET\n";
+            $stream .= "BT /F2 15 Tf 60 " . ($cardTopY - 254) . " Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
+            $stream .= "BT /F1 12.5 Tf 60 " . ($cardTopY - 271) . " Td (Konark Theatre Ln, opposite ICICI ATM,) Tj ET\n";
+            $stream .= "BT /F1 12.5 Tf 60 " . ($cardTopY - 287) . " Td (Gaddiannaram, Madhura Puri Colony,) Tj ET\n";
+            $stream .= "BT /F1 12.5 Tf 60 " . ($cardTopY - 303) . " Td (Dilsukhnagar, Hyderabad, Telangana - 500060) Tj ET\n";
+            $stream .= "BT /F2 13.5 Tf 60 " . ($cardTopY - 323) . " Td (TEL / HELPLINE: 09177110134) Tj ET\n";
+            $stream .= "2 w {$cardLeftX} " . ($cardTopY - 337) . " m {$cardRightX} " . ($cardTopY - 337) . " l S\n";
+
+            // 4. ORDER ID & PAYMENT STRIP
+            $stream .= "BT /F2 14 Tf 60 " . ($cardTopY - 359) . " Td (Order ID: {$sOrderCode}) Tj ET\n";
+            $stream .= "BT /F2 14 Tf " . ($cardRightX - 130) . " " . ($cardTopY - 359) . " Td (Payment: {$sPayment}) Tj ET\n";
+            $stream .= "2 w {$cardLeftX} " . ($cardTopY - 373) . " m {$cardRightX} " . ($cardTopY - 373) . " l S\n";
+
+            // 5. ITEM DETAILS (FIRST 5 BOOKS)
+            $stream .= "BT /F2 12 Tf 60 " . ($cardTopY - 390) . " Td (ITEM DETAILS (Books 1 to {$endBookNo} of {$totalCount}):) Tj ET\n";
+            $stream .= "BT /F2 11.5 Tf 60 " . ($cardTopY - 407) . " Td (PRODUCT) Tj ET\n";
+            $stream .= "BT /F2 11.5 Tf " . ($cardRightX - 45) . " " . ($cardTopY - 407) . " Td (QTY) Tj ET\n";
+            $stream .= "1 w 60 " . ($cardTopY - 414) . " m " . ($cardRightX - 15) . " " . ($cardTopY - 414) . " l S\n";
+
+            $curBookY = $cardTopY - 435;
+            foreach ($chunkItems as $itemIdx => $it) {
+                $bookNum = $startBookNo + $itemIdx;
+                $rawTitle = $it['product_name'] ?? 'Competitive Examination Book';
+                $cleanTitle = preg_replace('/\.{2,}$/', '', trim($rawTitle));
+                $formattedTitle = formatBookTitleCase($cleanTitle);
+                $fullTitle = "{$bookNum}. {$formattedTitle}";
+
+                $t1 = $esc(substr($fullTitle, 0, 52));
+                $t2 = (strlen($fullTitle) > 52) ? $esc(substr($fullTitle, 52, 52)) : '';
+                $qty = intval($it['qty'] ?? 1);
+
+                $stream .= "BT /F2 12 Tf 60 {$curBookY} Td ({$t1}) Tj ET\n";
+                if ($t2 !== '') {
+                    $curBookY -= 14;
+                    $stream .= "BT /F2 12 Tf 75 {$curBookY} Td ({$t2}) Tj ET\n";
+                }
+                $stream .= "BT /F2 14 Tf " . ($cardRightX - 35) . " {$curBookY} Td ({$qty}) Tj ET\n";
+
+                $curBookY -= 10;
+                $stream .= "[2 2] 0 d 0.5 w 60 {$curBookY} m " . ($cardRightX - 15) . " {$curBookY} l S [] 0 d\n";
+                $curBookY -= 14;
+            }
+
+            if ($totalPages > 1) {
+                $remCount = $totalCount - 5;
+                $stream .= "BT /F2 10 Tf " . ($cardRightX - 250) . " 115 Td (Continued on Page 2 for {$remCount} more books...) Tj ET\n";
+            }
+
+        } else {
+            // ================= PAGE 2+: ORDER ITEMS MANIFEST (NO TO / FROM) =================
+            // 1. HEADER
+            $stream .= "0 0 0 rg\n";
+            $stream .= "BT /F2 17 Tf 165 " . ($cardTopY - 25) . " Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
+            $stream .= "BT /F2 13.5 Tf 175 " . ($cardTopY - 45) . " Td (ORDER ITEMS MANIFEST (CONTINUED){$pageBadge}) Tj ET\n";
+            $stream .= "2 w {$cardLeftX} " . ($cardTopY - 55) . " m {$cardRightX} " . ($cardTopY - 55) . " l S\n";
+
+            // 2. COMPACT ORDER SUMMARY BAR (NO DUPLICATE TO/FROM ADDRESS)
+            $stream .= "BT /F2 12 Tf 60 " . ($cardTopY - 73) . " Td (Order ID: {$sOrderCode}) Tj ET\n";
+            $stream .= "BT /F2 12 Tf 230 " . ($cardTopY - 73) . " Td (Customer: {$sCustName}) Tj ET\n";
+            $stream .= "BT /F2 12 Tf " . ($cardRightX - 120) . " " . ($cardTopY - 73) . " Td (Payment: {$sPayment}) Tj ET\n";
+            $stream .= "1.5 w {$cardLeftX} " . ($cardTopY - 84) . " m {$cardRightX} " . ($cardTopY - 84) . " l S\n";
+
+            // 3. REMAINING ITEMS LIST
+            $stream .= "BT /F2 12 Tf 60 " . ($cardTopY - 105) . " Td (REMAINING ITEMS LIST (Books {$startBookNo} to {$endBookNo} of {$totalCount}):) Tj ET\n";
+            $stream .= "BT /F2 11.5 Tf 60 " . ($cardTopY - 122) . " Td (PRODUCT) Tj ET\n";
+            $stream .= "BT /F2 11.5 Tf " . ($cardRightX - 45) . " " . ($cardTopY - 122) . " Td (QTY) Tj ET\n";
+            $stream .= "1 w 60 " . ($cardTopY - 129) . " m " . ($cardRightX - 15) . " " . ($cardTopY - 129) . " l S\n";
+
+            $curBookY = $cardTopY - 150;
+            foreach ($chunkItems as $itemIdx => $it) {
+                $bookNum = $startBookNo + $itemIdx;
+                $rawTitle = $it['product_name'] ?? 'Competitive Examination Book';
+                $cleanTitle = preg_replace('/\.{2,}$/', '', trim($rawTitle));
+                $formattedTitle = formatBookTitleCase($cleanTitle);
+                $fullTitle = "{$bookNum}. {$formattedTitle}";
+
+                $t1 = $esc(substr($fullTitle, 0, 52));
+                $t2 = (strlen($fullTitle) > 52) ? $esc(substr($fullTitle, 52, 52)) : '';
+                $qty = intval($it['qty'] ?? 1);
+
+                $stream .= "BT /F2 12 Tf 60 {$curBookY} Td ({$t1}) Tj ET\n";
+                if ($t2 !== '') {
+                    $curBookY -= 14;
+                    $stream .= "BT /F2 12 Tf 75 {$curBookY} Td ({$t2}) Tj ET\n";
+                }
+                $stream .= "BT /F2 14 Tf " . ($cardRightX - 35) . " {$curBookY} Td ({$qty}) Tj ET\n";
+
+                $curBookY -= 10;
+                $stream .= "[2 2] 0 d 0.5 w 60 {$curBookY} m " . ($cardRightX - 15) . " {$curBookY} l S [] 0 d\n";
+                $curBookY -= 16;
+            }
         }
 
         // 6. FOOTER (NO BARCODE AS REQUESTED)
-        $stream .= "2 w 45 102 m 550 102 l S\n";
+        $stream .= "2 w {$cardLeftX} 102 m {$cardRightX} 102 l S\n";
         $stream .= "BT /F2 13 Tf 205 78 Td (Thank you for your order) Tj ET\n";
         $stream .= "Q\n";
 
         $pageStreams[] = $stream;
     }
 
-    $totalObjs = 4 + (2 * $totalChunks);
+    $totalObjs = 4 + (2 * $totalPages);
     $kids = [];
-    for ($k = 1; $k <= $totalChunks; $k++) {
+    for ($k = 1; $k <= $totalPages; $k++) {
         $kids[] = (4 + ($k - 1) * 2 + 1) . ' 0 R';
     }
+
+    $mediaBox = $isLegal ? '[0 0 612 1008]' : '[0 0 595.28 841.89]';
 
     $objects = [];
     $objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
@@ -1707,7 +1800,7 @@ function createNativeInvoicePdf($order, $items, $savePath) {
         $stream = $pageStreams[$k - 1];
         $streamLen = strlen($stream);
 
-        $objects[$pageObjId] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ' . $contObjId . ' 0 R >>';
+        $objects[$pageObjId] = '<< /Type /Page /Parent 2 0 R /MediaBox ' . $mediaBox . ' /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ' . $contObjId . ' 0 R >>';
         $objects[$contObjId] = "<< /Length {$streamLen} >>\nstream\n{$stream}endstream";
     }
 
@@ -1720,7 +1813,7 @@ function createNativeInvoicePdf($order, $items, $savePath) {
 
     $startxref = strlen($pdf);
     $pdf .= "xref\n0 " . ($totalObjs + 1) . "\n0000000000 65535 f \n";
-    for ($i = 1; $i <= $totalObjs; $i++) {
+    for ($i = 1; $i <= totalObjs; $i++) {
         $pdf .= sprintf("%010d 00000 n \n", $offsets[$i]);
     }
     $pdf .= "trailer\n<< /Size " . ($totalObjs + 1) . " /Root 1 0 R >>\nstartxref\n{$startxref}\n%%EOF\n";
@@ -1732,7 +1825,7 @@ function createNativeInvoicePdf($order, $items, $savePath) {
     return (file_put_contents($savePath, $pdf) !== false);
 }
 
-function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
+function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath, $size = 'a4') {
     try {
         if (is_numeric($orderIdOrCode)) {
             $ordStmt = $pdo->prepare('
@@ -1780,20 +1873,48 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
             $orderPayment = 'Paid';
         }
 
-        // Chunk items into exactly 5 books per page
-        $chunks = !empty($items) ? array_chunk($items, 5) : [[]];
-        $totalChunks = count($chunks);
+        // SMART PAGE SPLIT:
+        // Page 1: exactly first 5 books with TO/FROM
+        // Page 2+: remaining books (chunks of up to 10 books) with NO TO/FROM
+        $pages = [];
+        if (count($items) <= 5) {
+            $pages[] = [
+                'isFirstPage' => true,
+                'items' => $items,
+                'startBookNo' => 1,
+            ];
+        } else {
+            $pages[] = [
+                'isFirstPage' => true,
+                'items' => array_slice($items, 0, 5),
+                'startBookNo' => 1,
+            ];
+            $remaining = array_slice($items, 5);
+            $remChunks = array_chunk($remaining, 10);
+            foreach ($remChunks as $rIdx => $rChunk) {
+                $pages[] = [
+                    'isFirstPage' => false,
+                    'items' => $rChunk,
+                    'startBookNo' => 6 + ($rIdx * 10),
+                ];
+            }
+        }
+        $totalPages = count($pages);
         $totalItemsCount = count($items);
 
         $pagesHtml = '';
-        foreach ($chunks as $chunkIdx => $chunkItems) {
-            $pageNo = $chunkIdx + 1;
-            $pageBreakStyle = ($pageNo < $totalChunks) ? "page-break-after: always;" : "";
+        foreach ($pages as $pIdx => $page) {
+            $pageNo = $pIdx + 1;
+            $isFirstPage = $page['isFirstPage'];
+            $chunkItems = $page['items'];
+            $startBookNo = $page['startBookNo'];
+            $endBookNo = $startBookNo + count($chunkItems) - 1;
+            $pageBreakStyle = ($pageNo < $totalPages) ? "page-break-after: always;" : "";
 
             $tableRows = '';
             if (!empty($chunkItems)) {
                 foreach ($chunkItems as $itemIndex => $it) {
-                    $bookNo = ($chunkIdx * 5) + $itemIndex + 1;
+                    $bookNo = $startBookNo + $itemIndex;
                     $rawTitle = $it['product_name'] ?? 'Competitive Examination Book';
                     $cleanTitle = preg_replace('/\.{2,}$/', '', trim($rawTitle));
                     $title = htmlspecialchars(formatBookTitleCase($cleanTitle));
@@ -1821,7 +1942,7 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
                 </tr>";
             }
 
-            $pageBadge = ($totalChunks > 1) ? "<span style='font-size: 12px; font-weight: normal; margin-left: 6px;'>(Page {$pageNo} of {$totalChunks})</span>" : "";
+            $pageBadge = ($totalPages > 1) ? "<span style='font-size: 12px; font-weight: normal; margin-left: 6px;'>(Page {$pageNo} of {$totalPages})</span>" : "";
 
             $addrListHtml = '';
             foreach ($addressLines as $al) {
@@ -1829,10 +1950,9 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
             }
             $addrListHtml .= "<div>" . htmlspecialchars($state) . " - " . htmlspecialchars($pincode) . "</div>";
 
-            $pagesHtml .= "
-            <div style='width: 100%; max-width: 4.1in; margin: 0 auto; box-sizing: border-box; {$pageBreakStyle}'>
-                <div style='border: 2px solid #000; background: #fff;'>
-                    
+            if ($isFirstPage) {
+                // PAGE 1: FULL SHIPPING LABEL WITH TO & FROM
+                $pageContent = "
                     <!-- 1. HEADER: BRAND & SHIPPING LABEL -->
                     <div style='text-align: center; padding: 8px 10px; border-bottom: 2px solid #000;'>
                         <div style='font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px;'>
@@ -1896,10 +2016,10 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
                         </table>
                     </div>
 
-                    <!-- 5. ITEM DETAILS (MAX 5 BOOKS PER PAGE) -->
+                    <!-- 5. ITEM DETAILS (FIRST 5 BOOKS) -->
                     <div style='padding: 9px 12px; border-bottom: 1.5px solid #000;'>
                         <div style='font-size: 12px; font-weight: 900; text-transform: uppercase; margin-bottom: 4px;'>
-                            ITEM DETAILS:
+                            ITEM DETAILS (Books 1 to {$endBookNo} of {$totalItemsCount}):
                         </div>
                         <table style='width: 100%; border-collapse: collapse;'>
                             <thead>
@@ -1916,13 +2036,62 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
                                 {$tableRows}
                             </tbody>
                         </table>
+                    </div>";
+            } else {
+                // PAGE 2+: ORDER ITEMS MANIFEST ONLY (NO DUPLICATE TO/FROM ADDRESS)
+                $pageContent = "
+                    <!-- 1. HEADER: BRAND & MANIFEST TITLE -->
+                    <div style='text-align: center; padding: 8px 10px; border-bottom: 2px solid #000;'>
+                        <div style='font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px;'>
+                            SRI CHAITANYA BOOK CENTRE
+                        </div>
+                        <div style='font-size: 13.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;'>
+                            ORDER ITEMS MANIFEST (CONTINUED) {$pageBadge}
+                        </div>
                     </div>
 
-                    <!-- 6. FOOTER (NO BARCODE AS REQUESTED) -->
+                    <!-- 2. COMPACT ORDER & CUSTOMER STRIP -->
+                    <div style='padding: 8px 12px; border-bottom: 1.5px solid #000; font-size: 13px; background: #f8fafc;'>
+                        <table style='width: 100%; border-collapse: collapse;'>
+                            <tr>
+                                <td><strong>Order ID:</strong> {$orderCode}</td>
+                                <td style='text-align: center;'><strong>Customer:</strong> {$custName}</td>
+                                <td style='text-align: right;'><strong>Payment:</strong> {$orderPayment}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- 3. REMAINING ITEMS LIST -->
+                    <div style='padding: 10px 12px; border-bottom: 1.5px solid #000;'>
+                        <div style='font-size: 12px; font-weight: 900; text-transform: uppercase; margin-bottom: 4px;'>
+                            REMAINING ITEMS LIST (Books {$startBookNo} to {$endBookNo} of {$totalItemsCount}):
+                        </div>
+                        <table style='width: 100%; border-collapse: collapse;'>
+                            <thead>
+                                <tr>
+                                    <th style='text-align: left; border-bottom: 1.5px solid #000; padding: 4px 2px; font-size: 11.5px; font-weight: 900; text-transform: uppercase;'>
+                                        PRODUCT
+                                    </th>
+                                    <th style='text-align: center; border-bottom: 1.5px solid #000; padding: 4px 2px; font-size: 11.5px; font-weight: 900; text-transform: uppercase; width: 16%;'>
+                                        QTY
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {$tableRows}
+                            </tbody>
+                        </table>
+                    </div>";
+            }
+
+            $pagesHtml .= "
+            <div style='width: 100%; max-width: 4.1in; margin: 0 auto; box-sizing: border-box; {$pageBreakStyle}'>
+                <div style='border: 2px solid #000; background: #fff;'>
+                    {$pageContent}
+                    <!-- FOOTER (NO BARCODE AS REQUESTED) -->
                     <div style='text-align: center; font-size: 12.5px; font-weight: 700; padding: 9px 0;'>
                         Thank you for your order &#x1F4E6;
                     </div>
-
                 </div>
             </div>";
         }
@@ -1976,7 +2145,7 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath) {
         }
 
         // Native PDF fallback - 100% reliable without external libraries
-        return createNativeInvoicePdf($order, $items, $savePath);
+        return createNativeInvoicePdf($order, $items, $savePath, $size);
     } catch (\Throwable $e) {
         error_log('Invoice PDF generation failed: ' . $e->getMessage());
         return false;
@@ -2092,14 +2261,15 @@ if (preg_match('#^(order-history/invoice|invoices)/([a-zA-Z0-9_-]+)(\.pdf)?$#i',
     if (!is_dir($invoiceDir)) {
         @mkdir($invoiceDir, 0755, true);
     }
-    $invoiceFile = $invoiceDir . '/' . $orderCode . '.pdf';
+    $size = strtolower(trim($_GET['size'] ?? 'a4'));
+    $invoiceFile = $invoiceDir . '/' . $orderCode . ($size !== 'a4' ? "_{$size}" : '') . '.pdf';
 
     // Always regenerate freshly on each request so that any layout updates are immediately live
     $stmt = $pdo->prepare('SELECT id FROM orders WHERE order_code = ? OR id = ? LIMIT 1');
     $stmt->execute([$orderCode, is_numeric($orderCode) ? intval($orderCode) : -1]);
     $ord = $stmt->fetch();
     if ($ord) {
-        generateOrderInvoicePdf($pdo, $ord['id'], $invoiceFile);
+        generateOrderInvoicePdf($pdo, $ord['id'], $invoiceFile, $size);
     }
 
     if (file_exists($invoiceFile)) {

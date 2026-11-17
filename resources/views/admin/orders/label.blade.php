@@ -273,9 +273,31 @@
             $rawItems = is_array($order->items) ? $order->items : $order->items->all();
         }
         
-        // Exactly 5 books per page
-        $chunks = !empty($rawItems) ? array_chunk($rawItems, 5) : [[]];
-        $totalChunks = count($chunks);
+        // SMART PAGE SPLIT: Page 1 gets up to 5 books with TO/FROM. Page 2+ gets up to 10 books WITHOUT TO/FROM
+        $pages = [];
+        if (count($rawItems) <= 5) {
+            $pages[] = [
+                'isFirstPage' => true,
+                'items' => $rawItems,
+                'startBookNo' => 1,
+            ];
+        } else {
+            $pages[] = [
+                'isFirstPage' => true,
+                'items' => array_slice($rawItems, 0, 5),
+                'startBookNo' => 1,
+            ];
+            $remaining = array_slice($rawItems, 5);
+            $remChunks = array_chunk($remaining, 10);
+            foreach ($remChunks as $rIdx => $rChunk) {
+                $pages[] = [
+                    'isFirstPage' => false,
+                    'items' => $rChunk,
+                    'startBookNo' => 6 + ($rIdx * 10),
+                ];
+            }
+        }
+        $totalPages = count($pages);
         $totalItemsCount = count($rawItems);
 
         // Address resolution
@@ -303,9 +325,13 @@
         }
     @endphp
 
-    @foreach($chunks as $chunkIdx => $chunkItems)
+    @foreach($pages as $pIdx => $page)
         @php
-            $pageNo = $chunkIdx + 1;
+            $pageNo = $pIdx + 1;
+            $isFirstPage = $page['isFirstPage'];
+            $chunkItems = $page['items'];
+            $startBookNo = $page['startBookNo'];
+            $endBookNo = $startBookNo + count($chunkItems) - 1;
         @endphp
         <div class="page-wrapper">
             <div class="box">
@@ -313,56 +339,67 @@
                 <div class="header">
                     <div class="brand-name">SRI CHAITANYA BOOK CENTRE</div>
                     <div class="shipping-label-title">
-                        SHIPPING LABEL
-                        @if($totalChunks > 1)
-                            <span class="page-badge">(Page {{ $pageNo }} of {{ $totalChunks }})</span>
+                        {{ $isFirstPage ? 'SHIPPING LABEL' : 'ORDER ITEMS MANIFEST (CONTINUED)' }}
+                        @if($totalPages > 1)
+                            <span class="page-badge">(Page {{ $pageNo }} of {{ $totalPages }})</span>
                         @endif
                     </div>
                 </div>
 
-                <!-- TO: CONSIGNEE -->
-                <div class="section">
-                    <div class="sec-title">TO:</div>
-                    <div class="to-name">{{ $cName }}</div>
-                    <div class="to-phone">📞 {{ $cPhone }}</div>
-                    <div class="to-address">
-                        @foreach($addrParts as $ap)
-                            {{ $ap }}<br>
-                        @endforeach
-                        {{ $cState }} - {{ $cPincode }}
+                @if($isFirstPage)
+                    <!-- TO: CONSIGNEE -->
+                    <div class="section">
+                        <div class="sec-title">TO:</div>
+                        <div class="to-name">{{ $cName }}</div>
+                        <div class="to-phone">📞 {{ $cPhone }}</div>
+                        <div class="to-address">
+                            @foreach($addrParts as $ap)
+                                {{ $ap }}<br>
+                            @endforeach
+                            {{ $cState }} - {{ $cPincode }}
+                        </div>
+                        <div class="pincode-bar">
+                            <span class="pincode-label">PIN CODE:</span>
+                            <span class="pincode-num">{{ $cPincode ?: '------' }}</span>
+                        </div>
                     </div>
-                    <div class="pincode-bar">
-                        <span class="pincode-label">PIN CODE:</span>
-                        <span class="pincode-num">{{ $cPincode ?: '------' }}</span>
+
+                    <!-- FROM: SENDER -->
+                    <div class="section">
+                        <div class="sec-title">FROM:</div>
+                        <div class="from-brand">SRI CHAITANYA BOOK CENTRE</div>
+                        <div class="from-address">
+                            Konark Theatre Ln, opposite ICICI ATM,<br>
+                            Gaddiannaram, Madhura Puri Colony,<br>
+                            Dilsukhnagar, Hyderabad,<br>
+                            Telangana - 500060
+                        </div>
+                        <div class="from-phone">📞 09177110134</div>
                     </div>
-                </div>
 
-                <!-- FROM: SENDER -->
-                <div class="section">
-                    <div class="sec-title">FROM:</div>
-                    <div class="from-brand">SRI CHAITANYA BOOK CENTRE</div>
-                    <div class="from-address">
-                        Konark Theatre Ln, opposite ICICI ATM,<br>
-                        Gaddiannaram, Madhura Puri Colony,<br>
-                        Dilsukhnagar, Hyderabad,<br>
-                        Telangana - 500060
+                    <!-- ORDER ID & PAYMENT -->
+                    <div class="section order-info">
+                        <div><strong>Order ID:</strong> <span class="order-id-val">{{ $orderCode }}</span></div>
+                        <div><strong>Payment:</strong> <span class="payment-val">{{ $orderPayment }}</span></div>
                     </div>
-                    <div class="from-phone">📞 09177110134</div>
-                </div>
+                @else
+                    <!-- COMPACT ORDER BAR FOR PAGE 2+ (NO DUPLICATE TO/FROM) -->
+                    <div class="section order-info" style="background: #f8fafc;">
+                        <div><strong>Order ID:</strong> <span class="order-id-val">{{ $orderCode }}</span></div>
+                        <div><strong>Customer:</strong> <strong>{{ $cName }}</strong></div>
+                        <div><strong>Payment:</strong> <span class="payment-val">{{ $orderPayment }}</span></div>
+                    </div>
+                @endif
 
-                <!-- ORDER ID & PAYMENT -->
-                <div class="section order-info">
-                    <div><strong>Order ID:</strong> <span class="order-id-val">{{ $orderCode }}</span></div>
-                    <div><strong>Payment:</strong> <span class="payment-val">{{ $orderPayment }}</span></div>
-                </div>
-
-                <!-- ITEM DETAILS: MAX 5 BOOKS PER PAGE -->
+                <!-- ITEM DETAILS TABLE -->
                 <div class="section items-section">
                     <div class="items-header-row">
-                        <span class="sec-title" style="margin-bottom:0;">ITEM DETAILS:</span>
+                        <span class="sec-title" style="margin-bottom:0;">
+                            {{ $isFirstPage ? 'ITEM DETAILS:' : 'REMAINING ITEMS LIST:' }}
+                        </span>
                         @if($totalItemsCount > 0)
                             <span style="font-size:11px; font-weight:800; color:#444;">
-                                (Books {{ ($chunkIdx * 5) + 1 }} to {{ min(($chunkIdx * 5) + count($chunkItems), $totalItemsCount) }} of {{ $totalItemsCount }})
+                                (Books {{ $startBookNo }} to {{ $endBookNo }} of {{ $totalItemsCount }})
                             </span>
                         @endif
                     </div>
@@ -377,7 +414,7 @@
                             @if(!empty($chunkItems))
                                 @foreach($chunkItems as $itemIndex => $item)
                                     @php
-                                        $bookNo = ($chunkIdx * 5) + $itemIndex + 1;
+                                        $bookNo = $startBookNo + $itemIndex;
                                         $pName = is_array($item) ? ($item['product_name'] ?? $item['name'] ?? 'Book') : ($item->product_name ?? $item->name ?? 'Book');
                                         $pQty = is_array($item) ? ($item['quantity'] ?? $item['qty'] ?? 1) : ($item->quantity ?? $item->qty ?? 1);
                                     @endphp

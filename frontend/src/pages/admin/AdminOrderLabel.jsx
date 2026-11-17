@@ -20,25 +20,40 @@ function formatAddressLines(order) {
   return parts;
 }
 
-// Available Paper Sizes for Admin Selection
+// Available Paper Sizes for Admin Selection - Supports A4, Legal, A5, 4x6 Thermal, 9x14 cm, A3, Compact
 const PAPER_CONFIGS = {
   a4: {
     id: 'a4',
     name: 'A4 Sheet',
     dims: '210 × 297 mm',
-    desc: 'Standard Office Paper',
+    desc: 'Standard Full Sheet Dispatch Slip',
     pageSizeCss: 'A4 portrait',
-    marginCss: '5mm',
-    widthMm: '105mm', // ~4.1 inches wide, perfectly fills shipping label
+    marginCss: '6mm',
+    widthMm: '194mm',
+    previewMaxWidth: '194mm',
+    isLarge: true,
   },
-  '9x14': {
-    id: '9x14',
-    name: '9 × 14 cm Sticker',
-    dims: '90 × 140 mm',
-    desc: 'Courier & India Post Sticker',
-    pageSizeCss: '90mm 140mm portrait',
-    marginCss: '2mm',
-    widthMm: '86mm',
+  legal: {
+    id: 'legal',
+    name: 'Legal Sheet',
+    dims: '216 × 356 mm',
+    desc: 'Official Legal Size (8.5" × 14")',
+    pageSizeCss: 'legal portrait',
+    marginCss: '6mm',
+    widthMm: '202mm',
+    previewMaxWidth: '202mm',
+    isLarge: true,
+  },
+  a5: {
+    id: 'a5',
+    name: 'A5 Sheet',
+    dims: '148 × 210 mm',
+    desc: 'Half A4 Sheet Dispatch Slip',
+    pageSizeCss: 'A5 portrait',
+    marginCss: '5mm',
+    widthMm: '138mm',
+    previewMaxWidth: '138mm',
+    isLarge: false,
   },
   '4x6': {
     id: '4x6',
@@ -48,6 +63,41 @@ const PAPER_CONFIGS = {
     pageSizeCss: '100mm 150mm portrait',
     marginCss: '2mm',
     widthMm: '96mm',
+    previewMaxWidth: '96mm',
+    isLarge: false,
+  },
+  '9x14': {
+    id: '9x14',
+    name: '9 × 14 cm Sticker',
+    dims: '90 × 140 mm',
+    desc: 'Courier & India Post Sticker',
+    pageSizeCss: '90mm 140mm portrait',
+    marginCss: '2mm',
+    widthMm: '86mm',
+    previewMaxWidth: '86mm',
+    isLarge: false,
+  },
+  compact: {
+    id: 'compact',
+    name: 'Compact 4.1"',
+    dims: '105 × 148 mm',
+    desc: 'Quarter Sheet / 4-per-A4 Label',
+    pageSizeCss: 'A4 portrait',
+    marginCss: '5mm',
+    widthMm: '105mm',
+    previewMaxWidth: '105mm',
+    isLarge: false,
+  },
+  a3: {
+    id: 'a3',
+    name: 'A3 Sheet',
+    dims: '297 × 420 mm',
+    desc: 'Large Poster Sheet',
+    pageSizeCss: 'A3 portrait',
+    marginCss: '10mm',
+    widthMm: '275mm',
+    previewMaxWidth: '275mm',
+    isLarge: true,
   },
 };
 
@@ -56,6 +106,7 @@ export default function AdminOrderLabel({ orders, onClose }) {
 
   const [paperSize, setPaperSize] = useState('a4');
   const selectedConfig = PAPER_CONFIGS[paperSize] || PAPER_CONFIGS.a4;
+  const isLarge = selectedConfig.isLarge;
 
   const handlePrint = () => {
     window.print();
@@ -64,61 +115,84 @@ export default function AdminOrderLabel({ orders, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-start p-2 sm:p-4 overflow-y-auto">
       {/* Outer Card */}
-      <div className="bg-white rounded-3xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl my-auto print:m-0 print:p-0 print:shadow-none print:w-full print:max-w-none print:rounded-none">
+      <div className="bg-white rounded-3xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl my-auto print:m-0 print:p-0 print:shadow-none print:w-full print:max-w-none print:rounded-none">
 
         {/* Top Control Bar - Hidden during printing */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 mb-4 border-b border-slate-200 print:hidden">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <span className="font-black text-slate-900 text-sm sm:text-base">
-                Shipping Label & Dispatch Print
-              </span>
-              <span className="text-[11px] bg-red-100 text-red-800 font-extrabold px-2 py-0.5 rounded-md border border-red-200">
-                {selectedConfig.name} ({selectedConfig.dims})
-              </span>
+        <div className="pb-3.5 mb-4 border-b border-slate-200 print:hidden space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-slate-900 text-sm sm:text-base">
+                  Shipping Label & Dispatch Print
+                </span>
+                <span className="text-[11px] bg-red-100 text-red-800 font-extrabold px-2 py-0.5 rounded-md border border-red-200">
+                  {selectedConfig.name} ({selectedConfig.dims})
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {orders.length} {orders.length === 1 ? 'Order' : 'Orders'} • Page 1: Shipping Label (TO/FROM) • Page 2+: Order Items Manifest (Only Books)
+              </p>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
-              {orders.length} {orders.length === 1 ? 'Order' : 'Orders'} • 5 Books Max Per Page (Automatic Multi-Page Overflow)
-            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Paper Size Selector Dropdown */}
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <label htmlFor="paper-size-select" className="text-[10px] font-bold text-slate-600 px-1 uppercase">
+                  Paper:
+                </label>
+                <select
+                  id="paper-size-select"
+                  value={paperSize}
+                  onChange={(e) => setPaperSize(e.target.value)}
+                  className="bg-white text-xs font-bold text-slate-800 py-1.5 px-3 rounded-lg border border-slate-300 shadow-2xs cursor-pointer focus:ring-2 focus:ring-red-500 focus:outline-none"
+                >
+                  {Object.values(PAPER_CONFIGS).map((cfg) => (
+                    <option key={cfg.id} value={cfg.id}>
+                      {cfg.name} ({cfg.dims}) - {cfg.desc}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Print Button */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-black py-2 px-4 rounded-xl text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <Printer className="w-4 h-4 text-white" />
+                <span>Print Label</span>
+              </button>
+
+              {/* Close Preview */}
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors"
+                title="Close Preview"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Paper Size Selector Dropdown */}
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
-              <label htmlFor="paper-size-select" className="text-[10px] font-bold text-slate-600 px-1 uppercase">
-                Paper:
-              </label>
-              <select
-                id="paper-size-select"
-                value={paperSize}
-                onChange={(e) => setPaperSize(e.target.value)}
-                className="bg-white text-xs font-bold text-slate-800 py-1.5 px-3 rounded-lg border border-slate-300 shadow-2xs cursor-pointer focus:ring-2 focus:ring-red-500 focus:outline-none"
+          {/* Quick Select Size Pills Bar */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 scrollbar-thin">
+            <span className="text-slate-500 text-[10px] uppercase font-bold shrink-0 mr-1">Quick Select:</span>
+            {Object.values(PAPER_CONFIGS).map((cfg) => (
+              <button
+                key={cfg.id}
+                type="button"
+                onClick={() => setPaperSize(cfg.id)}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
+                  paperSize === cfg.id
+                    ? 'bg-red-600 text-white border-red-600 shadow-sm scale-102'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200/80 hover:text-black'
+                }`}
               >
-                <option value="a4">A4 Sheet (210 × 297 mm)</option>
-                <option value="9x14">9 × 14 cm Sticker (India Post)</option>
-                <option value="4x6">4" × 6" Thermal (100 × 150 mm)</option>
-              </select>
-            </div>
-
-            {/* Print Button */}
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-black py-2 px-4 rounded-xl text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer"
-            >
-              <Printer className="w-4 h-4 text-white" />
-              <span>Print Label</span>
-            </button>
-
-            {/* Close Preview */}
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors"
-              title="Close Preview"
-            >
-              <X className="w-5 h-5" />
-            </button>
+                {cfg.name}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -155,7 +229,7 @@ export default function AdminOrderLabel({ orders, onClose }) {
               display: block !important;
             }
             .shipping-label-sticker {
-              width: 100% !important;
+              width: ${selectedConfig.widthMm} !important;
               max-width: ${selectedConfig.widthMm} !important;
               height: auto !important;
               page-break-after: always !important;
@@ -163,9 +237,10 @@ export default function AdminOrderLabel({ orders, onClose }) {
               page-break-inside: avoid !important;
               break-inside: avoid !important;
               box-sizing: border-box !important;
-              margin: 0 auto 0 auto !important;
+              margin: 0 auto !important;
               padding: 0 !important;
               background: #ffffff !important;
+              border: 2.5px solid #000000 !important;
             }
             .shipping-label-sticker:last-child {
               page-break-after: auto !important;
@@ -181,16 +256,35 @@ export default function AdminOrderLabel({ orders, onClose }) {
             const addressLines = formatAddressLines(order);
             const totalItemsCount = rawItems.length;
 
-            // Exactly 5 books per page
-            const chunks = [];
-            if (rawItems.length === 0) {
-              chunks.push([]);
+            // SMART PAGE SPLIT LOGIC:
+            // Page 1 has TO & FROM address + exactly the first 5 books.
+            // Page 2+ are CONTINUATION MANIFESTS with NO TO/FROM address, only the remaining books!
+            const pages = [];
+            if (rawItems.length <= 5) {
+              pages.push({
+                isFirstPage: true,
+                items: rawItems,
+                startBookNo: 1,
+              });
             } else {
-              for (let i = 0; i < rawItems.length; i += 5) {
-                chunks.push(rawItems.slice(i, i + 5));
+              // Page 1: exactly first 5 books with TO/FROM
+              pages.push({
+                isFirstPage: true,
+                items: rawItems.slice(0, 5),
+                startBookNo: 1,
+              });
+              // Subsequent pages: up to 10 books per continuation page, NO TO/FROM
+              const remaining = rawItems.slice(5);
+              const CHUNK_SIZE = 10;
+              for (let i = 0; i < remaining.length; i += CHUNK_SIZE) {
+                pages.push({
+                  isFirstPage: false,
+                  items: remaining.slice(i, i + CHUNK_SIZE),
+                  startBookNo: 6 + i,
+                });
               }
             }
-            const totalChunks = chunks.length;
+            const totalPages = pages.length;
 
             const orderCode = order.order_code || `ORD${order.id}`;
             let orderPayment = order.status || 'Paid';
@@ -203,8 +297,12 @@ export default function AdminOrderLabel({ orders, onClose }) {
             const state = order.state || order.customer?.state || 'Telangana / Andhra Pradesh';
             const pincode = order.pincode || order.customer?.pincode || '';
 
-            return chunks.map((chunkItems, chunkIdx) => {
-              const pageNo = chunkIdx + 1;
+            return pages.map((page, pageIdx) => {
+              const pageNo = pageIdx + 1;
+              const isFirstPage = page.isFirstPage;
+              const chunkItems = page.items;
+              const startBookNo = page.startBookNo;
+              const endBookNo = startBookNo + chunkItems.length - 1;
 
               return (
                 <div
@@ -212,95 +310,116 @@ export default function AdminOrderLabel({ orders, onClose }) {
                   className="shipping-label-sticker bg-white text-black border-[2.5px] border-black flex flex-col justify-start shadow-md print:shadow-none box-border select-none my-3 print:my-0"
                   style={{
                     width: '100%',
-                    maxWidth: '4.1in',
+                    maxWidth: selectedConfig.previewMaxWidth,
                     boxSizing: 'border-box',
                     fontFamily: 'Arial, Helvetica, sans-serif',
                   }}
                 >
-                  {/* TOP HEADER: BRAND NAME & SHIPPING LABEL */}
-                  <div className="border-b-[2px] border-black bg-white text-center py-2 px-3">
-                    <h1 className="text-[16px] font-black uppercase tracking-wide text-black m-0 leading-tight">
+                  {/* TOP HEADER */}
+                  <div className={`border-b-[2px] border-black bg-white text-center ${isLarge ? 'py-3 px-4' : 'py-2 px-3'}`}>
+                    <h1 className={`${isLarge ? 'text-[20px] sm:text-[22px]' : 'text-[16px]'} font-black uppercase tracking-wide text-black m-0 leading-tight`}>
                       SRI CHAITANYA BOOK CENTRE
                     </h1>
-                    <div className="text-[14.5px] font-extrabold uppercase tracking-widest text-black mt-0.5">
-                      SHIPPING LABEL
-                      {totalChunks > 1 && (
+                    <div className={`${isLarge ? 'text-[16px] sm:text-[17px]' : 'text-[14.5px]'} font-extrabold uppercase tracking-widest text-black mt-0.5`}>
+                      {isFirstPage ? 'SHIPPING LABEL' : 'ORDER ITEMS MANIFEST (CONTINUED)'}
+                      {totalPages > 1 && (
                         <span className="text-[12px] font-bold text-slate-800 ml-1.5 tracking-normal">
-                          (Page {pageNo} of {totalChunks})
+                          (Page {pageNo} of {totalPages})
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* TO: CONSIGNEE */}
-                  <div className="border-b-[1.5px] border-black p-3 bg-white">
-                    <div className="text-[12px] font-black uppercase text-slate-800 tracking-wider mb-1">
-                      TO:
-                    </div>
-                    <div className="text-[17px] font-black uppercase text-black leading-snug mb-1">
-                      {customerName}
-                    </div>
-                    <div className="text-[15.5px] font-black text-black mb-1.5 flex items-center gap-1.5">
-                      <span>📞</span>
-                      <span className="font-mono tracking-wide">{customerPhone}</span>
-                    </div>
-                    <div className="text-[13.5px] font-semibold text-slate-900 leading-[1.45] space-y-0.5 capitalize mb-2">
-                      {addressLines.map((line, lIdx) => (
-                        <p key={lIdx} className="m-0">{line}</p>
-                      ))}
-                      <p className="m-0">{state} - {pincode}</p>
-                    </div>
-                    <div className="pt-1.5 border-t border-dashed border-slate-400 flex items-center justify-between">
-                      <span className="text-[13.5px] font-black uppercase text-black">
-                        PIN CODE:
-                      </span>
-                      <span className="font-mono font-black text-[20px] text-black tracking-widest">
-                        {pincode || '------'}
-                      </span>
-                    </div>
-                  </div>
+                  {/* ONLY ON PAGE 1: TO & FROM ADDRESS SECTIONS */}
+                  {isFirstPage ? (
+                    <>
+                      {/* TO: CONSIGNEE */}
+                      <div className={`border-b-[1.5px] border-black bg-white ${isLarge ? 'p-4' : 'p-3'}`}>
+                        <div className={`${isLarge ? 'text-[13.5px]' : 'text-[12px]'} font-black uppercase text-slate-800 tracking-wider mb-1`}>
+                          TO:
+                        </div>
+                        <div className={`${isLarge ? 'text-[21px] sm:text-[23px]' : 'text-[17px]'} font-black uppercase text-black leading-snug mb-1`}>
+                          {customerName}
+                        </div>
+                        <div className={`${isLarge ? 'text-[18px]' : 'text-[15.5px]'} font-black text-black mb-1.5 flex items-center gap-1.5`}>
+                          <span>📞</span>
+                          <span className="font-mono tracking-wide">{customerPhone}</span>
+                        </div>
+                        <div className={`${isLarge ? 'text-[15.5px] space-y-1' : 'text-[13.5px] space-y-0.5'} font-semibold text-slate-900 leading-[1.45] capitalize mb-2`}>
+                          {addressLines.map((line, lIdx) => (
+                            <p key={lIdx} className="m-0">{line}</p>
+                          ))}
+                          <p className="m-0">{state} - {pincode}</p>
+                        </div>
+                        <div className="pt-2 border-t border-dashed border-slate-400 flex items-center justify-between">
+                          <span className={`${isLarge ? 'text-[16px]' : 'text-[13.5px]'} font-black uppercase text-black`}>
+                            PIN CODE:
+                          </span>
+                          <span className={`font-mono font-black ${isLarge ? 'text-[28px]' : 'text-[20px]'} text-black tracking-widest`}>
+                            {pincode || '------'}
+                          </span>
+                        </div>
+                      </div>
 
-                  {/* FROM: SENDER */}
-                  <div className="border-b-[1.5px] border-black p-3 bg-white text-[12.5px] leading-snug">
-                    <div className="text-[12px] font-black uppercase text-slate-800 tracking-wider mb-1">
-                      FROM:
-                    </div>
-                    <div className="font-black text-[14.5px] uppercase text-black mb-0.5">
-                      SRI CHAITANYA BOOK CENTRE
-                    </div>
-                    <div className="text-slate-800 text-[12.5px] font-medium leading-snug">
-                      Konark Theatre Ln, opposite ICICI ATM,<br />
-                      Gaddiannaram, Madhura Puri Colony,<br />
-                      Dilsukhnagar, Hyderabad,<br />
-                      Telangana - 500060
-                    </div>
-                    <div className="text-black text-[13.5px] font-bold mt-1.5 flex items-center gap-1.5">
-                      <span>📞</span>
-                      <span className="font-mono font-black">09177110134</span>
-                    </div>
-                  </div>
+                      {/* FROM: SENDER */}
+                      <div className={`border-b-[1.5px] border-black bg-white leading-snug ${isLarge ? 'p-4 text-[14px]' : 'p-3 text-[12.5px]'}`}>
+                        <div className={`${isLarge ? 'text-[13.5px]' : 'text-[12px]'} font-black uppercase text-slate-800 tracking-wider mb-1`}>
+                          FROM:
+                        </div>
+                        <div className={`font-black ${isLarge ? 'text-[17px]' : 'text-[14.5px]'} uppercase text-black mb-0.5`}>
+                          SRI CHAITANYA BOOK CENTRE
+                        </div>
+                        <div className={`text-slate-800 ${isLarge ? 'text-[14px] leading-normal' : 'text-[12.5px] leading-snug'}`}>
+                          Konark Theatre Ln, opposite ICICI ATM,<br />
+                          Gaddiannaram, Madhura Puri Colony,<br />
+                          Dilsukhnagar, Hyderabad,<br />
+                          Telangana - 500060
+                        </div>
+                        <div className={`text-black ${isLarge ? 'text-[15.5px]' : 'text-[13.5px]'} font-bold mt-1.5 flex items-center gap-1.5`}>
+                          <span>📞</span>
+                          <span className="font-mono font-black">09177110134</span>
+                        </div>
+                      </div>
 
-                  {/* ORDER ID & PAYMENT */}
-                  <div className="border-b-[1.5px] border-black p-3 bg-white flex items-center justify-between text-[13.5px]">
-                    <div>
-                      <span className="font-bold text-slate-700">Order ID: </span>
-                      <span className="font-mono font-black text-[15px] text-black tracking-wide">{orderCode}</span>
+                      {/* ORDER ID & PAYMENT STRIP */}
+                      <div className={`border-b-[1.5px] border-black bg-white flex items-center justify-between ${isLarge ? 'p-3.5 text-[15.5px]' : 'p-3 text-[13.5px]'}`}>
+                        <div>
+                          <span className="font-bold text-slate-700">Order ID: </span>
+                          <span className={`font-mono font-black ${isLarge ? 'text-[17px]' : 'text-[15px]'} text-black tracking-wide`}>{orderCode}</span>
+                        </div>
+                        <div>
+                          <span className="font-bold text-slate-700">Payment: </span>
+                          <span className={`font-black ${isLarge ? 'text-[16px]' : 'text-[14px]'} uppercase text-black`}>{orderPayment}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    /* PAGE 2+: COMPACT ORDER SUMMARY BAR (NO DUPLICATE TO/FROM ADDRESS) */
+                    <div className={`border-b-[1.5px] border-black bg-slate-50 flex flex-wrap items-center justify-between gap-2 ${isLarge ? 'p-3.5 text-[15px]' : 'p-3 text-[13px]'}`}>
+                      <div>
+                        <span className="font-bold text-slate-600">Order ID: </span>
+                        <span className="font-mono font-black text-black">{orderCode}</span>
+                      </div>
+                      <div>
+                        <span className="font-bold text-slate-600">Customer: </span>
+                        <span className="font-black text-black uppercase">{customerName}</span>
+                      </div>
+                      <div>
+                        <span className="font-bold text-slate-600">Payment: </span>
+                        <span className="font-black text-black uppercase">{orderPayment}</span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-bold text-slate-700">Payment: </span>
-                      <span className="font-black text-[14px] uppercase text-black">{orderPayment}</span>
-                    </div>
-                  </div>
+                  )}
 
-                  {/* ITEM DETAILS: EXACTLY UP TO 5 BOOKS PER PAGE */}
-                  <div className="p-3 bg-white border-b-[1.5px] border-black">
+                  {/* ITEM DETAILS TABLE */}
+                  <div className={`bg-white border-b-[1.5px] border-black flex-1 ${isLarge ? 'p-4' : 'p-3'}`}>
                     <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-[12px] font-black uppercase text-slate-800 tracking-wider">
-                        ITEM DETAILS:
+                      <span className={`${isLarge ? 'text-[13.5px]' : 'text-[12px]'} font-black uppercase text-slate-800 tracking-wider`}>
+                        {isFirstPage ? 'ITEM DETAILS:' : 'REMAINING ITEMS LIST:'}
                       </span>
                       {totalItemsCount > 0 && (
-                        <span className="text-[11px] font-extrabold text-slate-600">
-                          (Books {(chunkIdx * 5) + 1} to {Math.min((chunkIdx * 5) + chunkItems.length, totalItemsCount)} of {totalItemsCount})
+                        <span className={`${isLarge ? 'text-[12.5px]' : 'text-[11px]'} font-extrabold text-slate-600`}>
+                          (Books {startBookNo} to {endBookNo} of {totalItemsCount})
                         </span>
                       )}
                     </div>
@@ -308,10 +427,10 @@ export default function AdminOrderLabel({ orders, onClose }) {
                     <table className="w-full border-collapse">
                       <thead>
                         <tr>
-                          <th className="text-left border-b-[1.5px] border-black py-1 px-1 text-[11.5px] font-black uppercase text-black">
+                          <th className={`text-left border-b-[1.5px] border-black py-1 px-1 ${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-black`}>
                             PRODUCT
                           </th>
-                          <th className="text-center border-b-[1.5px] border-black py-1 px-1 text-[11.5px] font-black uppercase text-black w-[16%]">
+                          <th className={`text-center border-b-[1.5px] border-black py-1 px-1 ${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-black w-[16%]`}>
                             QTY
                           </th>
                         </tr>
@@ -319,7 +438,7 @@ export default function AdminOrderLabel({ orders, onClose }) {
                       <tbody>
                         {chunkItems.length > 0 ? (
                           chunkItems.map((item, itemIdx) => {
-                            const bookNo = (chunkIdx * 5) + itemIdx + 1;
+                            const bookNo = startBookNo + itemIdx;
                             const rawTitle = item.product_name || item.book_title || item.name || 'Competitive Book';
                             const cleanTitle = String(rawTitle).replace(/\.{2,}$/, '').trim();
                             const title = toTitleCase(cleanTitle);
@@ -327,11 +446,11 @@ export default function AdminOrderLabel({ orders, onClose }) {
 
                             return (
                               <tr key={itemIdx} className="border-b border-dashed border-slate-300 last:border-b-0">
-                                <td className="py-1.5 px-1 text-[12.5px] font-semibold text-black leading-snug">
+                                <td className={`py-1.5 px-1 ${isLarge ? 'text-[14px]' : 'text-[12.5px]'} font-semibold text-black leading-snug`}>
                                   <span className="font-bold mr-1">{bookNo}.</span>
                                   {title}
                                 </td>
-                                <td className="py-1.5 px-1 text-center font-mono font-black text-[13.5px] text-black">
+                                <td className={`py-1.5 px-1 text-center font-mono font-black ${isLarge ? 'text-[16px]' : 'text-[13.5px]'} text-black`}>
                                   {qty}
                                 </td>
                               </tr>
@@ -339,21 +458,30 @@ export default function AdminOrderLabel({ orders, onClose }) {
                           })
                         ) : (
                           <tr>
-                            <td className="py-1.5 px-1 text-[12.5px] font-semibold text-black leading-snug">
+                            <td className={`py-1.5 px-1 ${isLarge ? 'text-[14px]' : 'text-[12.5px]'} font-semibold text-black leading-snug`}>
                               <span className="font-bold mr-1">1.</span>
                               Sri Chaitanya Examination Study Material
                             </td>
-                            <td className="py-1.5 px-1 text-center font-mono font-black text-[13.5px] text-black">
+                            <td className={`py-1.5 px-1 text-center font-mono font-black ${isLarge ? 'text-[16px]' : 'text-[13.5px]'} text-black`}>
                               1
                             </td>
                           </tr>
                         )}
                       </tbody>
                     </table>
+
+                    {/* Note on Page 1 if more books exist on next page */}
+                    {isFirstPage && totalPages > 1 && (
+                      <div className="mt-2 text-right">
+                        <span className="text-[11.5px] font-extrabold text-slate-700 italic">
+                          ☞ (Remaining {totalItemsCount - 5} Books Continued on Page 2)
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* FOOTER (NO BARCODE AS REQUESTED) */}
-                  <div className="py-2 px-3 text-center text-[12.5px] font-bold text-black bg-white">
+                  <div className={`py-2 px-3 text-center ${isLarge ? 'text-[14px]' : 'text-[12.5px]'} font-bold text-black bg-white`}>
                     Thank you for your order 📦
                   </div>
                 </div>

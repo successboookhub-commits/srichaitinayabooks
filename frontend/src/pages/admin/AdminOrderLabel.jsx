@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import toTitleCase from '../../utils/titleCase.js';
 
@@ -102,9 +103,27 @@ const PAPER_CONFIGS = {
 };
 
 export default function AdminOrderLabel({ orders, onClose }) {
-  if (!orders || orders.length === 0) return null;
-
+  const [mounted, setMounted] = useState(false);
   const [paperSize, setPaperSize] = useState('a4');
+
+  useEffect(() => {
+    setMounted(true);
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      setMounted(false);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  if (!orders || orders.length === 0 || !mounted) return null;
+
   const selectedConfig = PAPER_CONFIGS[paperSize] || PAPER_CONFIGS.a4;
   const isLarge = selectedConfig.isLarge;
 
@@ -112,384 +131,436 @@ export default function AdminOrderLabel({ orders, onClose }) {
     window.print();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-start p-2 sm:p-4 overflow-y-auto">
-      {/* Outer Card */}
-      <div className="bg-white rounded-3xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl my-auto print:m-0 print:p-0 print:shadow-none print:w-full print:max-w-none print:rounded-none">
-
-        {/* Top Control Bar - Hidden during printing */}
-        <div className="pb-3.5 mb-4 border-b border-slate-200 print:hidden space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="font-black text-slate-900 text-sm sm:text-base">
-                  Shipping Label & Dispatch Print
-                </span>
-                <span className="text-[11px] bg-red-100 text-red-800 font-extrabold px-2 py-0.5 rounded-md border border-red-200">
-                  {selectedConfig.name} ({selectedConfig.dims})
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 font-medium">
-                {orders.length} {orders.length === 1 ? 'Order' : 'Orders'} • Page 1: Shipping Label (TO/FROM) • Page 2+: Order Items Manifest (Only Books)
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Paper Size Selector Dropdown */}
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                <label htmlFor="paper-size-select" className="text-[10px] font-bold text-slate-600 px-1 uppercase">
-                  Paper:
-                </label>
-                <select
-                  id="paper-size-select"
-                  value={paperSize}
-                  onChange={(e) => setPaperSize(e.target.value)}
-                  className="bg-white text-xs font-bold text-slate-800 py-1.5 px-3 rounded-lg border border-slate-300 shadow-2xs cursor-pointer focus:ring-2 focus:ring-red-500 focus:outline-none"
-                >
-                  {Object.values(PAPER_CONFIGS).map((cfg) => (
-                    <option key={cfg.id} value={cfg.id}>
-                      {cfg.name} ({cfg.dims}) - {cfg.desc}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Print Button */}
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-black py-2 px-4 rounded-xl text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer"
-              >
-                <Printer className="w-4 h-4 text-white" />
-                <span>Print Label</span>
-              </button>
-
-              {/* Close Preview */}
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors"
-                title="Close Preview"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Select Size Pills Bar */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 scrollbar-thin">
-            <span className="text-slate-500 text-[10px] uppercase font-bold shrink-0 mr-1">Quick Select:</span>
-            {Object.values(PAPER_CONFIGS).map((cfg) => (
-              <button
-                key={cfg.id}
-                type="button"
-                onClick={() => setPaperSize(cfg.id)}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
-                  paperSize === cfg.id
-                    ? 'bg-red-600 text-white border-red-600 shadow-sm scale-102'
-                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200/80 hover:text-black'
-                }`}
-              >
-                {cfg.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ================= PRINT CSS INJECTION ================= */}
-        <style dangerouslySetInnerHTML={{
-          __html: `
+  const modalContent = (
+    <div id="shipping-labels-portal-root">
+      {/* Dynamic Print CSS for Selected Paper Size + Bulletproof Pagination */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @media print {
           @page {
             size: ${selectedConfig.pageSizeCss};
             margin: ${selectedConfig.marginCss};
           }
-          @media print {
-            html, body {
-              width: 100% !important;
-              height: auto !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              background: #ffffff !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-            body * {
-              visibility: hidden !important;
-            }
-            #shipping-labels-printable-root, #shipping-labels-printable-root * {
-              visibility: visible !important;
-            }
-            #shipping-labels-printable-root {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 100% !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              display: block !important;
-            }
-            .shipping-label-sticker {
-              width: ${selectedConfig.widthMm} !important;
-              max-width: ${selectedConfig.widthMm} !important;
-              height: auto !important;
-              page-break-after: always !important;
-              break-after: page !important;
-              page-break-inside: avoid !important;
-              break-inside: avoid !important;
-              box-sizing: border-box !important;
-              margin: 0 auto !important;
-              padding: 0 !important;
-              background: #ffffff !important;
-              border: 2.5px solid #000000 !important;
-            }
-            .shipping-label-sticker:last-child {
-              page-break-after: auto !important;
-              break-after: auto !important;
-            }
+
+          /* Hide entire main application (#root) and any sibling dialogs */
+          #root,
+          body > *:not(#shipping-labels-portal-root) {
+            display: none !important;
+            visibility: hidden !important;
           }
-        ` }} />
 
-        {/* Printable Area */}
-        <div id="shipping-labels-printable-root" className="space-y-6 print:space-y-0 flex flex-col items-center w-full">
-          {orders.map((order, orderIdx) => {
-            const rawItems = order.items && order.items.length > 0 ? order.items : [];
-            const addressLines = formatAddressLines(order);
-            const totalItemsCount = rawItems.length;
+          html, body {
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
 
-            // SMART PAGE SPLIT LOGIC:
-            // Page 1 has TO & FROM address + exactly the first 5 books.
-            // Page 2+ are CONTINUATION MANIFESTS with NO TO/FROM address, only the remaining books!
-            const pages = [];
-            if (rawItems.length <= 5) {
-              pages.push({
-                isFirstPage: true,
-                items: rawItems,
-                startBookNo: 1,
-              });
-            } else {
-              // Page 1: exactly first 5 books with TO/FROM
-              pages.push({
-                isFirstPage: true,
-                items: rawItems.slice(0, 5),
-                startBookNo: 1,
-              });
-              // Subsequent pages: up to 10 books per continuation page, NO TO/FROM
-              const remaining = rawItems.slice(5);
-              const CHUNK_SIZE = 10;
-              for (let i = 0; i < remaining.length; i += CHUNK_SIZE) {
-                pages.push({
-                  isFirstPage: false,
-                  items: remaining.slice(i, i + CHUNK_SIZE),
-                  startBookNo: 6 + i,
-                });
-              }
-            }
-            const totalPages = pages.length;
+          #shipping-labels-portal-root {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: transparent !important;
+          }
 
-            const orderCode = order.order_code || `ORD${order.id}`;
-            let orderPayment = order.status || 'Paid';
-            if (orderPayment.toLowerCase() === 'delivered' || orderPayment.toLowerCase() === 'processing') {
-              orderPayment = 'Paid';
-            }
+          .print-control-bar {
+            display: none !important;
+          }
 
-            const customerName = order.customer_name || order.customer?.name || 'Customer';
-            const customerPhone = order.customer_phone || order.customer?.phone || '-';
-            const state = order.state || order.customer?.state || 'Telangana / Andhra Pradesh';
-            const pincode = order.pincode || order.customer?.pincode || '';
+          .print-modal-backdrop {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+          }
 
-            return pages.map((page, pageIdx) => {
-              const pageNo = pageIdx + 1;
-              const isFirstPage = page.isFirstPage;
-              const chunkItems = page.items;
-              const startBookNo = page.startBookNo;
-              const endBookNo = startBookNo + chunkItems.length - 1;
+          .print-modal-card {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: none !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: transparent !important;
+            border-radius: 0 !important;
+          }
 
-              return (
-                <div
-                  key={`${order.id || orderIdx}-page-${pageNo}`}
-                  className="shipping-label-sticker bg-white text-black border-[2.5px] border-black flex flex-col justify-start shadow-md print:shadow-none box-border select-none my-3 print:my-0"
-                  style={{
-                    width: '100%',
-                    maxWidth: selectedConfig.previewMaxWidth,
-                    boxSizing: 'border-box',
-                    fontFamily: 'Arial, Helvetica, sans-serif',
-                  }}
+          #shipping-labels-printable-root {
+            display: block !important;
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+
+          .shipping-label-sticker {
+            display: block !important;
+            position: relative !important;
+            width: ${selectedConfig.widthMm} !important;
+            max-width: ${selectedConfig.widthMm} !important;
+            box-sizing: border-box !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            border: 2.5px solid #000000 !important;
+            page-break-before: auto !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .shipping-label-sticker:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+        }
+      ` }} />
+
+      {/* Screen Backdrop & Centered Modal */}
+      <div
+        className="print-modal-backdrop fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-start p-2 sm:p-4 overflow-y-auto"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose?.();
+        }}
+      >
+        <div className="print-modal-card bg-white rounded-3xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl my-auto">
+
+          {/* Top Control Bar - Hidden during printing */}
+          <div className="print-control-bar pb-3.5 mb-4 border-b border-slate-200 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-slate-900 text-sm sm:text-base">
+                    Shipping Label & Dispatch Print
+                  </span>
+                  <span className="text-[11px] bg-red-100 text-red-800 font-extrabold px-2 py-0.5 rounded-md border border-red-200">
+                    {selectedConfig.name} ({selectedConfig.dims})
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {orders.length} {orders.length === 1 ? 'Order' : 'Orders'} • Page 1: Shipping Label (TO/FROM) • Page 2+: Order Items Manifest (Only Books)
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Paper Size Selector Dropdown */}
+                <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <label htmlFor="paper-size-select" className="text-[10px] font-bold text-slate-600 px-1 uppercase">
+                    Paper:
+                  </label>
+                  <select
+                    id="paper-size-select"
+                    value={paperSize}
+                    onChange={(e) => setPaperSize(e.target.value)}
+                    className="bg-white text-xs font-bold text-slate-800 py-1.5 px-3 rounded-lg border border-slate-300 shadow-2xs cursor-pointer focus:ring-2 focus:ring-red-500 focus:outline-none"
+                  >
+                    {Object.values(PAPER_CONFIGS).map((cfg) => (
+                      <option key={cfg.id} value={cfg.id}>
+                        {cfg.name} ({cfg.dims}) - {cfg.desc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Print Button */}
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-black py-2 px-4 rounded-xl text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer"
                 >
-                  {/* TOP HEADER */}
-                  <div className={`border-b-[2px] border-black bg-white text-center ${isLarge ? 'py-3 px-4' : 'py-2 px-3'}`}>
-                    <h1 className={`${isLarge ? 'text-[20px] sm:text-[22px]' : 'text-[16px]'} font-black uppercase tracking-wide text-black m-0 leading-tight`}>
-                      SRI CHAITANYA BOOK CENTRE
-                    </h1>
-                    <div className={`${isLarge ? 'text-[16px] sm:text-[17px]' : 'text-[14.5px]'} font-extrabold uppercase tracking-widest text-black mt-0.5`}>
-                      {isFirstPage ? 'SHIPPING LABEL' : 'ORDER ITEMS MANIFEST (CONTINUED)'}
-                      {totalPages > 1 && (
-                        <span className="text-[12px] font-bold text-slate-800 ml-1.5 tracking-normal">
-                          (Page {pageNo} of {totalPages})
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  <Printer className="w-4 h-4 text-white" />
+                  <span>Print Label</span>
+                </button>
 
-                  {/* ONLY ON PAGE 1: TO & FROM ADDRESS SECTIONS */}
-                  {isFirstPage ? (
-                    <>
-                      {/* TO: CONSIGNEE */}
-                      <div className={`border-b-[1.5px] border-black bg-white ${isLarge ? 'p-4' : 'p-3'}`}>
-                        <div className={`${isLarge ? 'text-[13.5px]' : 'text-[12px]'} font-black uppercase text-slate-800 tracking-wider mb-1`}>
-                          TO:
-                        </div>
-                        <div className={`${isLarge ? 'text-[21px] sm:text-[23px]' : 'text-[17px]'} font-black uppercase text-black leading-snug mb-1`}>
-                          {customerName}
-                        </div>
-                        <div className={`${isLarge ? 'text-[18px]' : 'text-[15.5px]'} font-black text-black mb-1.5 flex items-center gap-1.5`}>
-                          <span>📞</span>
-                          <span className="font-mono tracking-wide">{customerPhone}</span>
-                        </div>
-                        <div className={`${isLarge ? 'text-[15.5px] space-y-1' : 'text-[13.5px] space-y-0.5'} font-semibold text-slate-900 leading-[1.45] capitalize mb-2`}>
-                          {addressLines.map((line, lIdx) => (
-                            <p key={lIdx} className="m-0">{line}</p>
-                          ))}
-                          <p className="m-0">{state} - {pincode}</p>
-                        </div>
-                        <div className="pt-2 border-t border-dashed border-slate-400 flex items-center justify-between">
-                          <span className={`${isLarge ? 'text-[16px]' : 'text-[13.5px]'} font-black uppercase text-black`}>
-                            PIN CODE:
+                {/* Close Preview */}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors"
+                  title="Close Preview (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Select Size Pills Bar */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 scrollbar-thin">
+              <span className="text-slate-500 text-[10px] uppercase font-bold shrink-0 mr-1">Quick Select:</span>
+              {Object.values(PAPER_CONFIGS).map((cfg) => (
+                <button
+                  key={cfg.id}
+                  type="button"
+                  onClick={() => setPaperSize(cfg.id)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
+                    paperSize === cfg.id
+                      ? 'bg-red-600 text-white border-red-600 shadow-sm scale-102'
+                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200/80 hover:text-black'
+                  }`}
+                >
+                  {cfg.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Printable Area */}
+          <div id="shipping-labels-printable-root" className="space-y-6 block w-full">
+            {orders.map((order, orderIdx) => {
+              const rawItems = order.items && order.items.length > 0 ? order.items : [];
+              const addressLines = formatAddressLines(order);
+              const totalItemsCount = rawItems.length;
+
+              // SMART PAGE SPLIT LOGIC:
+              // Page 1 has TO & FROM address + exactly the first 5 books.
+              // Page 2+ are CONTINUATION MANIFESTS with NO TO/FROM address, only the remaining books!
+              const pages = [];
+              if (rawItems.length <= 5) {
+                pages.push({
+                  isFirstPage: true,
+                  items: rawItems,
+                  startBookNo: 1,
+                });
+              } else {
+                // Page 1: exactly first 5 books with TO/FROM
+                pages.push({
+                  isFirstPage: true,
+                  items: rawItems.slice(0, 5),
+                  startBookNo: 1,
+                });
+                // Subsequent pages: up to 10 books per continuation page, NO TO/FROM
+                const remaining = rawItems.slice(5);
+                const CHUNK_SIZE = 10;
+                for (let i = 0; i < remaining.length; i += CHUNK_SIZE) {
+                  pages.push({
+                    isFirstPage: false,
+                    items: remaining.slice(i, i + CHUNK_SIZE),
+                    startBookNo: 6 + i,
+                  });
+                }
+              }
+              const totalPages = pages.length;
+
+              const orderCode = order.order_code || `ORD${order.id}`;
+              let orderPayment = order.status || 'Paid';
+              if (orderPayment.toLowerCase() === 'delivered' || orderPayment.toLowerCase() === 'processing') {
+                orderPayment = 'Paid';
+              }
+
+              const customerName = order.customer_name || order.customer?.name || 'Customer';
+              const customerPhone = order.customer_phone || order.customer?.phone || '-';
+              const state = order.state || order.customer?.state || 'Telangana / Andhra Pradesh';
+              const pincode = order.pincode || order.customer?.pincode || '';
+
+              return pages.map((page, pageIdx) => {
+                const pageNo = pageIdx + 1;
+                const isFirstPage = page.isFirstPage;
+                const chunkItems = page.items;
+                const startBookNo = page.startBookNo;
+                const endBookNo = startBookNo + chunkItems.length - 1;
+
+                return (
+                  <div
+                    key={`${order.id || orderIdx}-page-${pageNo}`}
+                    className="shipping-label-sticker bg-white text-black border-[2.5px] border-black flex flex-col justify-start shadow-md print:shadow-none box-border select-none my-3 mx-auto"
+                    style={{
+                      width: '100%',
+                      maxWidth: selectedConfig.previewMaxWidth,
+                      boxSizing: 'border-box',
+                      fontFamily: 'Arial, Helvetica, sans-serif',
+                    }}
+                  >
+                    {/* TOP HEADER */}
+                    <div className={`border-b-[2px] border-black bg-white text-center ${isLarge ? 'py-3 px-4' : 'py-2 px-3'}`}>
+                      <h1 className={`${isLarge ? 'text-[20px] sm:text-[22px]' : 'text-[16px]'} font-black uppercase tracking-wide text-black m-0 leading-tight`}>
+                        SRI CHAITANYA BOOK CENTRE
+                      </h1>
+                      <div className={`${isLarge ? 'text-[16px] sm:text-[17px]' : 'text-[14.5px]'} font-extrabold uppercase tracking-widest text-black mt-0.5`}>
+                        {isFirstPage ? 'SHIPPING LABEL' : 'ORDER ITEMS MANIFEST (CONTINUED)'}
+                        {totalPages > 1 && (
+                          <span className="text-[12px] font-bold text-slate-800 ml-1.5 tracking-normal">
+                            (Page {pageNo} of {totalPages})
                           </span>
-                          <span className={`font-mono font-black ${isLarge ? 'text-[28px]' : 'text-[20px]'} text-black tracking-widest`}>
-                            {pincode || '------'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* FROM: SENDER */}
-                      <div className={`border-b-[1.5px] border-black bg-white leading-snug ${isLarge ? 'p-4 text-[14px]' : 'p-3 text-[12.5px]'}`}>
-                        <div className={`${isLarge ? 'text-[13.5px]' : 'text-[12px]'} font-black uppercase text-slate-800 tracking-wider mb-1`}>
-                          FROM:
-                        </div>
-                        <div className={`font-black ${isLarge ? 'text-[17px]' : 'text-[14.5px]'} uppercase text-black mb-0.5`}>
-                          SRI CHAITANYA BOOK CENTRE
-                        </div>
-                        <div className={`text-slate-800 ${isLarge ? 'text-[14px] leading-normal' : 'text-[12.5px] leading-snug'}`}>
-                          Konark Theatre Ln, opposite ICICI ATM,<br />
-                          Gaddiannaram, Madhura Puri Colony,<br />
-                          Dilsukhnagar, Hyderabad,<br />
-                          Telangana - 500060
-                        </div>
-                        <div className={`text-black ${isLarge ? 'text-[15.5px]' : 'text-[13.5px]'} font-bold mt-1.5 flex items-center gap-1.5`}>
-                          <span>📞</span>
-                          <span className="font-mono font-black">09177110134</span>
-                        </div>
-                      </div>
-
-                      {/* ORDER ID & PAYMENT STRIP */}
-                      <div className={`border-b-[1.5px] border-black bg-white flex items-center justify-between ${isLarge ? 'p-3.5 text-[15.5px]' : 'p-3 text-[13.5px]'}`}>
-                        <div>
-                          <span className="font-bold text-slate-700">Order ID: </span>
-                          <span className={`font-mono font-black ${isLarge ? 'text-[17px]' : 'text-[15px]'} text-black tracking-wide`}>{orderCode}</span>
-                        </div>
-                        <div>
-                          <span className="font-bold text-slate-700">Payment: </span>
-                          <span className={`font-black ${isLarge ? 'text-[16px]' : 'text-[14px]'} uppercase text-black`}>{orderPayment}</span>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    /* PAGE 2+: COMPACT ORDER SUMMARY BAR (NO DUPLICATE TO/FROM ADDRESS) */
-                    <div className={`border-b-[1.5px] border-black bg-slate-50 flex flex-wrap items-center justify-between gap-2 ${isLarge ? 'p-3.5 text-[15px]' : 'p-3 text-[13px]'}`}>
-                      <div>
-                        <span className="font-bold text-slate-600">Order ID: </span>
-                        <span className="font-mono font-black text-black">{orderCode}</span>
-                      </div>
-                      <div>
-                        <span className="font-bold text-slate-600">Customer: </span>
-                        <span className="font-black text-black uppercase">{customerName}</span>
-                      </div>
-                      <div>
-                        <span className="font-bold text-slate-600">Payment: </span>
-                        <span className="font-black text-black uppercase">{orderPayment}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ITEM DETAILS TABLE */}
-                  <div className={`bg-white border-b-[1.5px] border-black flex-1 ${isLarge ? 'p-4' : 'p-3'}`}>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className={`${isLarge ? 'text-[13.5px]' : 'text-[12px]'} font-black uppercase text-slate-800 tracking-wider`}>
-                        {isFirstPage ? 'ITEM DETAILS:' : 'REMAINING ITEMS LIST:'}
-                      </span>
-                      {totalItemsCount > 0 && (
-                        <span className={`${isLarge ? 'text-[12.5px]' : 'text-[11px]'} font-extrabold text-slate-600`}>
-                          (Books {startBookNo} to {endBookNo} of {totalItemsCount})
-                        </span>
-                      )}
-                    </div>
-
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr>
-                          <th className={`text-left border-b-[1.5px] border-black py-1 px-1 ${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-black`}>
-                            PRODUCT
-                          </th>
-                          <th className={`text-center border-b-[1.5px] border-black py-1 px-1 ${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-black w-[16%]`}>
-                            QTY
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {chunkItems.length > 0 ? (
-                          chunkItems.map((item, itemIdx) => {
-                            const bookNo = startBookNo + itemIdx;
-                            const rawTitle = item.product_name || item.book_title || item.name || 'Competitive Book';
-                            const cleanTitle = String(rawTitle).replace(/\.{2,}$/, '').trim();
-                            const title = toTitleCase(cleanTitle);
-                            const qty = parseInt(item.qty || item.quantity || 1, 10);
-
-                            return (
-                              <tr key={itemIdx} className="border-b border-dashed border-slate-300 last:border-b-0">
-                                <td className={`py-1.5 px-1 ${isLarge ? 'text-[14px]' : 'text-[12.5px]'} font-semibold text-black leading-snug`}>
-                                  <span className="font-bold mr-1">{bookNo}.</span>
-                                  {title}
-                                </td>
-                                <td className={`py-1.5 px-1 text-center font-mono font-black ${isLarge ? 'text-[16px]' : 'text-[13.5px]'} text-black`}>
-                                  {qty}
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr>
-                            <td className={`py-1.5 px-1 ${isLarge ? 'text-[14px]' : 'text-[12.5px]'} font-semibold text-black leading-snug`}>
-                              <span className="font-bold mr-1">1.</span>
-                              Sri Chaitanya Examination Study Material
-                            </td>
-                            <td className={`py-1.5 px-1 text-center font-mono font-black ${isLarge ? 'text-[16px]' : 'text-[13.5px]'} text-black`}>
-                              1
-                            </td>
-                          </tr>
                         )}
-                      </tbody>
-                    </table>
+                      </div>
+                    </div>
 
-                    {/* Note on Page 1 if more books exist on next page */}
-                    {isFirstPage && totalPages > 1 && (
-                      <div className="mt-2 text-right">
-                        <span className="text-[11.5px] font-extrabold text-slate-700 italic">
-                          ☞ (Remaining {totalItemsCount - 5} Books Continued on Page 2)
-                        </span>
+                    {/* ONLY ON PAGE 1: TO & FROM ADDRESS SECTIONS (MATCHING SAMPLE SLIP) */}
+                    {isFirstPage ? (
+                      <>
+                        {/* TO: CONSIGNEE - Exact format matching sample slip: address lines ending with state - pincode */}
+                        <div className={`border-b-[1.5px] border-black bg-white ${isLarge ? 'p-4' : 'p-3'}`}>
+                          <div className={`${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-slate-700 tracking-wider mb-1`}>
+                            TO:
+                          </div>
+                          <div className={`${isLarge ? 'text-[20px] sm:text-[22px]' : 'text-[16.5px]'} font-black uppercase text-black leading-snug mb-1`}>
+                            {customerName}
+                          </div>
+                          <div className={`${isLarge ? 'text-[17px]' : 'text-[15px]'} font-black text-black mb-1.5 flex items-center gap-1.5`}>
+                            <span>📞</span>
+                            <span className="font-mono tracking-wide">{customerPhone}</span>
+                          </div>
+                          <div className={`${isLarge ? 'text-[15px] space-y-0.5' : 'text-[13px] space-y-0.5'} font-semibold text-black leading-snug capitalize`}>
+                            {addressLines.map((line, lIdx) => (
+                              <p key={lIdx} className="m-0">{line}</p>
+                            ))}
+                            <p className="m-0 font-bold">{state}{pincode ? ` - ${pincode}` : ''}</p>
+                          </div>
+                        </div>
+
+                        {/* FROM: SENDER */}
+                        <div className={`border-b-[1.5px] border-black bg-white leading-snug ${isLarge ? 'p-4 text-[14px]' : 'p-3 text-[12.5px]'}`}>
+                          <div className={`${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-slate-700 tracking-wider mb-1`}>
+                            FROM:
+                          </div>
+                          <div className={`font-black ${isLarge ? 'text-[16.5px]' : 'text-[14.5px]'} uppercase text-black mb-0.5`}>
+                            SRI CHAITANYA BOOK CENTRE
+                          </div>
+                          <div className={`text-black ${isLarge ? 'text-[14px] leading-normal' : 'text-[12.5px] leading-snug'} font-medium`}>
+                            Konark Theatre Ln, opposite ICICI ATM,<br />
+                            Gaddiannaram, Madhura Puri Colony,<br />
+                            Dilsukhnagar, Hyderabad,<br />
+                            Telangana - 500060
+                          </div>
+                          <div className={`text-black ${isLarge ? 'text-[15.5px]' : 'text-[13.5px]'} font-black mt-1.5 flex items-center gap-1.5`}>
+                            <span>📞</span>
+                            <span className="font-mono font-black">09177110134</span>
+                          </div>
+                        </div>
+
+                        {/* ORDER ID & PAYMENT STRIP */}
+                        <div className={`border-b-[1.5px] border-black bg-white flex items-center justify-between ${isLarge ? 'p-3 text-[15px]' : 'p-2.5 text-[13px]'}`}>
+                          <div>
+                            <span className="font-bold text-slate-700">Order ID: </span>
+                            <span className={`font-mono font-black ${isLarge ? 'text-[17px]' : 'text-[15px]'} text-black tracking-wide`}>{orderCode}</span>
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-700">Payment: </span>
+                            <span className={`font-black ${isLarge ? 'text-[16px]' : 'text-[14px]'} uppercase text-black`}>{orderPayment}</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      /* PAGE 2+: COMPACT ORDER SUMMARY BAR (NO DUPLICATE TO/FROM ADDRESS) */
+                      <div className={`border-b-[1.5px] border-black bg-slate-50 flex flex-wrap items-center justify-between gap-2 ${isLarge ? 'p-3.5 text-[15px]' : 'p-3 text-[13px]'}`}>
+                        <div>
+                          <span className="font-bold text-slate-600">Order ID: </span>
+                          <span className="font-mono font-black text-black">{orderCode}</span>
+                        </div>
+                        <div>
+                          <span className="font-bold text-slate-600">Customer: </span>
+                          <span className="font-black text-black uppercase">{customerName}</span>
+                        </div>
+                        <div>
+                          <span className="font-bold text-slate-600">Payment: </span>
+                          <span className="font-black text-black uppercase">{orderPayment}</span>
+                        </div>
                       </div>
                     )}
-                  </div>
 
-                  {/* FOOTER (NO BARCODE AS REQUESTED) */}
-                  <div className={`py-2 px-3 text-center ${isLarge ? 'text-[14px]' : 'text-[12.5px]'} font-bold text-black bg-white`}>
-                    Thank you for your order 📦
+                    {/* ITEM DETAILS TABLE */}
+                    <div className={`bg-white border-b-[1.5px] border-black flex-1 ${isLarge ? 'p-4' : 'p-3'}`}>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className={`${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-slate-800 tracking-wider`}>
+                          {isFirstPage ? 'ITEM DETAILS:' : 'REMAINING ITEMS LIST:'}
+                        </span>
+                        {totalItemsCount > 0 && (
+                          <span className={`${isLarge ? 'text-[12px]' : 'text-[10.5px]'} font-bold text-slate-600`}>
+                            (Books {startBookNo} to {endBookNo} of {totalItemsCount})
+                          </span>
+                        )}
+                      </div>
+
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr>
+                            <th className={`text-left border-b-[1.5px] border-black py-1 px-1 ${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-black`}>
+                              PRODUCT
+                            </th>
+                            <th className={`text-center border-b-[1.5px] border-black py-1 px-1 ${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-black w-[16%]`}>
+                              QTY
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chunkItems.length > 0 ? (
+                            chunkItems.map((item, itemIdx) => {
+                              const bookNo = startBookNo + itemIdx;
+                              const rawTitle = item.product_name || item.book_title || item.name || 'Competitive Book';
+                              const cleanTitle = String(rawTitle).replace(/\.{2,}$/, '').trim();
+                              const title = toTitleCase(cleanTitle);
+                              const qty = parseInt(item.qty || item.quantity || 1, 10);
+
+                              return (
+                                <tr key={itemIdx} className="border-b border-dashed border-slate-300 last:border-b-0">
+                                  <td className={`py-1.5 px-1 ${isLarge ? 'text-[13.5px]' : 'text-[12px]'} font-semibold text-black leading-snug`}>
+                                    <span className="font-bold mr-1">{bookNo}.</span>
+                                    {title}
+                                  </td>
+                                  <td className={`py-1.5 px-1 text-center font-mono font-black ${isLarge ? 'text-[15px]' : 'text-[13px]'} text-black`}>
+                                    {qty}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td className={`py-1.5 px-1 ${isLarge ? 'text-[14px]' : 'text-[12.5px]'} font-semibold text-black leading-snug`}>
+                                <span className="font-bold mr-1">1.</span>
+                                Sri Chaitanya Examination Study Material
+                              </td>
+                              <td className={`py-1.5 px-1 text-center font-mono font-black ${isLarge ? 'text-[16px]' : 'text-[13.5px]'} text-black`}>
+                                1
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+
+                      {/* Note on Page 1 if more books exist on next page */}
+                      {isFirstPage && totalPages > 1 && (
+                        <div className="mt-2 text-right">
+                          <span className="text-[11px] font-extrabold text-slate-700 italic">
+                            ☞ (Remaining {totalItemsCount - 5} Books Continued on Page 2)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* FOOTER (NO BARCODE AS REQUESTED) */}
+                    <div className={`py-2 px-3 text-center ${isLarge ? 'text-[14px]' : 'text-[12.5px]'} font-bold text-black bg-white`}>
+                      Thank you for your order 📦
+                    </div>
                   </div>
-                </div>
-              );
-            });
-          })}
+                );
+              });
+            })}
+          </div>
         </div>
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

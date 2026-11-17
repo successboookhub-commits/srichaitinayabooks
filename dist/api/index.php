@@ -1672,10 +1672,6 @@ function createNativeInvoicePdf($order, $items, $savePath, $size = 'a4') {
             }
             $stream .= "BT /F1 13.5 Tf 60 {$curAddrY} Td ({$esc($state)} - {$sPincode}) Tj ET\n";
 
-            // Dashed line before PIN CODE
-            $stream .= "[3 2] 0 d 0.75 w 60 " . ($cardTopY - 180) . " m " . ($cardRightX - 15) . " " . ($cardTopY - 180) . " l S [] 0 d\n";
-            $stream .= "BT /F2 14 Tf 60 " . ($cardTopY - 200) . " Td (PIN CODE:) Tj ET\n";
-            $stream .= "BT /F2 22 Tf " . ($cardRightX - 115) . " " . ($cardTopY - 200) . " Td ({$sPincode}) Tj ET\n";
             $stream .= "2 w {$cardLeftX} " . ($cardTopY - 220) . " m {$cardRightX} " . ($cardTopY - 220) . " l S\n";
 
             // 3. FROM: SECTION
@@ -1976,14 +1972,6 @@ function generateOrderInvoicePdf($pdo, $orderIdOrCode, $savePath, $size = 'a4') 
                         </div>
                         <div style='font-size: 13.5px; font-weight: 600; line-height: 1.45; text-transform: capitalize;'>
                             {$addrListHtml}
-                        </div>
-                        <div style='margin-top: 6px; padding-top: 5px; border-top: 1px dashed #777;'>
-                            <table style='width: 100%; border-collapse: collapse;'>
-                                <tr>
-                                    <td style='font-size: 13.5px; font-weight: 900; text-transform: uppercase;'>PIN CODE:</td>
-                                    <td style='text-align: right; font-size: 20px; font-weight: 900; letter-spacing: 2px; font-family: monospace;'>{$pincode}</td>
-                                </tr>
-                            </table>
                         </div>
                     </div>
 

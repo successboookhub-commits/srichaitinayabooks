@@ -358,10 +358,6 @@
                             @endforeach
                             {{ $cState }} - {{ $cPincode }}
                         </div>
-                        <div class="pincode-bar">
-                            <span class="pincode-label">PIN CODE:</span>
-                            <span class="pincode-num">{{ $cPincode ?: '------' }}</span>
-                        </div>
                     </div>
 
                     <!-- FROM: SENDER -->

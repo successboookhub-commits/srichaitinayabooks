@@ -85,11 +85,11 @@ export default function Navbar() {
   const setWishlistOpen = useWishlistStore((state) => state.setWishlistOpen);
   const wishlistCount = wishlistItems.length;
 
-  // Close mobile drawer and search modal on route change
+  // Close mobile drawer and search modal on ANY route or query change
   useEffect(() => {
     setIsMobileMenuOpen(false);
     setIsSearchModalOpen(false);
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   // Lock body scroll when mobile menu or search modal is open
   useEffect(() => {
@@ -165,10 +165,12 @@ export default function Navbar() {
   }, []);
 
   const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/shop?search=${encodeURIComponent(searchQuery.trim())}`);
+    if (e?.preventDefault) e.preventDefault();
+    const q = searchQuery.trim();
+    if (q) {
+      setIsSearchModalOpen(false);
       setSuggestions([]);
+      navigate(`/shop?search=${encodeURIComponent(q)}`);
     }
   };
 
@@ -875,17 +877,17 @@ export default function Navbar() {
 
                 {/* Footer Bar: View all results in Shop */}
                 <div className="p-4 bg-slate-50/80 border-t border-slate-100 text-center">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      handleSearchSubmit(e);
+                  <Link
+                    to={`/shop?search=${encodeURIComponent(searchQuery.trim())}`}
+                    onClick={() => {
                       setIsSearchModalOpen(false);
+                      setSuggestions([]);
                     }}
                     className="w-full py-2.5 rounded-xl bg-white border border-slate-200 hover:border-red-500 text-xs font-black text-red-600 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <span>View all matching results for "{searchQuery}"</span>
                     <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  </Link>
                 </div>
               </div>
             ) : searchQuery.trim().length >= 1 ? (
@@ -894,17 +896,17 @@ export default function Navbar() {
                 <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
                   Check your spelling or try searching exam keywords like AP-SET, TG-SET, TGPSC, Police, or Vijetha.
                 </p>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    handleSearchSubmit(e);
+                <Link
+                  to={`/shop?search=${encodeURIComponent(searchQuery.trim())}`}
+                  onClick={() => {
                     setIsSearchModalOpen(false);
+                    setSuggestions([]);
                   }}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs cursor-pointer"
                 >
                   <span>Search All Books in Shop</span>
                   <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                </Link>
               </div>
             ) : (
               /* Popular exam tags when search is empty */

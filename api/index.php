@@ -218,6 +218,59 @@ function clearStoreCache() {
     }
 }
 
+// Intelligent fuzzy, multi-token, and acronym search SQL helper
+function buildBookSearchClause($query, &$params) {
+    $q = trim($query);
+    if (empty($q)) {
+        return '1=1';
+    }
+
+    $directTerm = '%' . $q . '%';
+
+    // Stripped alphanumeric (e.g. "AP-SET" -> "apset", "T.J.R." -> "tjr")
+    $stripped = preg_replace('/[^a-zA-Z0-9]/', '', $q);
+    $strippedTerm = (!empty($stripped) && strlen($stripped) >= 2) ? '%' . $stripped . '%' : null;
+
+    // Tokens split by whitespace, hyphens, periods, slashes
+    $rawTokens = preg_split('/[\s,\-\.\/]+/', $q, -1, PREG_SPLIT_NO_EMPTY);
+    $tokens = array_filter($rawTokens, function($t) { return strlen($t) >= 1; });
+
+    $orBranches = [];
+
+    // Branch 1: Direct substring on name, publication, or description
+    $branch1 = "(p.name LIKE ? OR pub.name LIKE ? OR p.description LIKE ?";
+    $params[] = $directTerm;
+    $params[] = $directTerm;
+    $params[] = $directTerm;
+    if (is_numeric($q)) {
+        $branch1 .= " OR p.id = ?";
+        $params[] = intval($q);
+    }
+    $branch1 .= ")";
+    $orBranches[] = $branch1;
+
+    // Branch 2: Multi-token match - all words must appear in (name, pub, description)
+    if (count($tokens) > 1) {
+        $tokenAnds = [];
+        foreach ($tokens as $token) {
+            $tTerm = '%' . $token . '%';
+            $tokenAnds[] = "(p.name LIKE ? OR pub.name LIKE ? OR p.description LIKE ?)";
+            $params[] = $tTerm;
+            $params[] = $tTerm;
+            $params[] = $tTerm;
+        }
+        $orBranches[] = "(" . implode(' AND ', $tokenAnds) . ")";
+    }
+
+    // Branch 3: Acronym / normalized stripped matching
+    if ($strippedTerm && strtolower($stripped) !== strtolower($q)) {
+        $orBranches[] = "(REPLACE(REPLACE(REPLACE(REPLACE(p.name, '-', ''), '.', ''), ' ', ''), '/', '') LIKE ?)";
+        $params[] = $strippedTerm;
+    }
+
+    return "(" . implode(' OR ', $orBranches) . ")";
+}
+
 // -------------------------------------------------------------
 // REAL-TIME WEBSOCKET / SSE STREAM & SYNC
 // -------------------------------------------------------------
@@ -883,12 +936,8 @@ if ($path === 'products' || $path === 'products/admin' || $path === 'products/ad
         }
 
         if (!empty($search)) {
-            $sql .= " AND (p.name LIKE ? OR p.id = ? OR pub.name LIKE ? OR p.description LIKE ?)";
-            $term = '%' . $search . '%';
-            $params[] = $term;
-            $params[] = is_numeric($search) ? intval($search) : 0;
-            $params[] = $term;
-            $params[] = $term;
+            $searchClause = buildBookSearchClause($search, $params);
+            $sql .= " AND " . $searchClause;
         }
 
         if (!empty($publicationId)) {
@@ -1274,17 +1323,18 @@ if ($path === 'products/suggest') {
         echo json_encode(['success' => true, 'suggestions' => [], 'results' => [], 'products' => []]);
         exit;
     }
-    $term = '%' . $q . '%';
     $leadTerm = $q . '%';
 
     try {
+        $params = [];
+        $searchClause = buildBookSearchClause($q, $params);
         $sql = "SELECT p.id, p.name, p.slug, p.main_photo, p.main_photo AS image, 
                        p.total_price, p.total_price AS price, p.old_price, p.actual_price,
                        pub.name AS publication_name
                 FROM products p
                 LEFT JOIN publications pub ON p.publication_id = pub.id
                 WHERE p.is_active = 1 
-                  AND (p.name LIKE ? OR pub.name LIKE ? OR p.description LIKE ?)
+                  AND " . $searchClause . "
                 ORDER BY 
                   CASE 
                     WHEN p.name LIKE ? THEN 1
@@ -1292,13 +1342,17 @@ if ($path === 'products/suggest') {
                     ELSE 3
                   END, p.id DESC
                 LIMIT 10";
+        $params[] = $leadTerm;
+        $params[] = $leadTerm;
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$term, $term, $term, $leadTerm, $leadTerm]);
+        $stmt->execute($params);
         $results = $stmt->fetchAll();
     } catch (\Throwable $e) {
         // Fallback simple search if join or column issue
-        $stmt = $pdo->prepare('SELECT id, name, slug, main_photo, main_photo AS image, total_price, total_price AS price, old_price FROM products WHERE is_active = 1 AND name LIKE ? ORDER BY id DESC LIMIT 10');
-        $stmt->execute([$term]);
+        $paramsFallback = [];
+        $searchClause = buildBookSearchClause($q, $paramsFallback);
+        $stmt = $pdo->prepare('SELECT id, name, slug, main_photo, main_photo AS image, total_price, total_price AS price, old_price FROM products p WHERE p.is_active = 1 AND ' . $searchClause . ' ORDER BY p.id DESC LIMIT 10');
+        $stmt->execute($paramsFallback);
         $results = $stmt->fetchAll();
     }
 

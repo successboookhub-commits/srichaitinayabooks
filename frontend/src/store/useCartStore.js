@@ -13,7 +13,7 @@ export const useCartStore = create(
 
       setDrawerOpen: (isOpen) => set({ isDrawerOpen: isOpen }),
 
-      addItem: (product, qty = 1) => {
+      addItem: (product, qty = 1, openDrawer = false) => {
         const { cart } = get();
         const existing = cart.find((item) => item.id === product.id);
 
@@ -41,7 +41,7 @@ export const useCartStore = create(
           ];
         }
 
-        set({ cart: newCart, isDrawerOpen: true });
+        set({ cart: newCart, ...(openDrawer ? { isDrawerOpen: true } : {}) });
         get().calculateLiveTotals();
       },
 

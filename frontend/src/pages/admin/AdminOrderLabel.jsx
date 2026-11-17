@@ -127,116 +127,112 @@ export default function AdminOrderLabel({ orders, onClose }) {
   const selectedConfig = PAPER_CONFIGS[paperSize] || PAPER_CONFIGS.a4;
   const isLarge = selectedConfig.isLarge;
 
+  // Bulletproof Multi-Page Printing via Isolated Hidden Iframe
+  // Ensures Chrome never clips to 1 sheet and forces clean multi-sheet pagination
   const handlePrint = () => {
-    window.print();
+    const printableArea = document.getElementById('shipping-labels-printable-root');
+    if (!printableArea) {
+      window.print();
+      return;
+    }
+
+    // Clean up any old print iframe
+    const oldIframe = document.getElementById('isolated-shipping-print-iframe');
+    if (oldIframe) {
+      oldIframe.remove();
+    }
+
+    // Collect all stylesheets from current document
+    const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      .map((link) => link.outerHTML)
+      .join('\n');
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'isolated-shipping-print-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title>Shipping Labels Print</title>
+          ${styleLinks}
+          <style>
+            @page {
+              size: ${selectedConfig.pageSizeCss};
+              margin: ${selectedConfig.marginCss};
+            }
+            * {
+              box-sizing: border-box !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: #ffffff !important;
+              color: #000000 !important;
+              font-family: Arial, Helvetica, sans-serif !important;
+              width: 100% !important;
+              height: auto !important;
+              min-height: 0 !important;
+              overflow: visible !important;
+            }
+            .shipping-label-sticker {
+              display: block !important;
+              position: relative !important;
+              width: ${selectedConfig.widthMm} !important;
+              max-width: ${selectedConfig.widthMm} !important;
+              margin: 0 auto !important;
+              background: #ffffff !important;
+              border: 2.5px solid #000000 !important;
+              page-break-before: auto !important;
+              page-break-after: always !important;
+              break-after: page !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+            .shipping-label-sticker:last-child {
+              page-break-after: auto !important;
+              break-after: auto !important;
+            }
+            table {
+              width: 100% !important;
+              border-collapse: collapse !important;
+            }
+          </style>
+        </head>
+        <body>
+          ${printableArea.innerHTML}
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    // Give iframe a moment to parse CSS before triggering print
+    setTimeout(() => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch (err) {
+        console.error('Iframe print error, falling back to window.print():', err);
+        window.print();
+      }
+    }, 300);
   };
 
   const modalContent = (
     <div id="shipping-labels-portal-root">
-      {/* Dynamic Print CSS for Selected Paper Size + Bulletproof Pagination */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        @media print {
-          @page {
-            size: ${selectedConfig.pageSizeCss};
-            margin: ${selectedConfig.marginCss};
-          }
-
-          /* Hide entire main application (#root) and any sibling dialogs */
-          #root,
-          body > *:not(#shipping-labels-portal-root) {
-            display: none !important;
-            visibility: hidden !important;
-          }
-
-          html, body {
-            width: 100% !important;
-            height: auto !important;
-            min-height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-            background: #ffffff !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-
-          #shipping-labels-portal-root {
-            position: static !important;
-            display: block !important;
-            width: 100% !important;
-            height: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-            background: transparent !important;
-          }
-
-          .print-control-bar {
-            display: none !important;
-          }
-
-          .print-modal-backdrop {
-            position: static !important;
-            display: block !important;
-            width: 100% !important;
-            height: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-            background: transparent !important;
-            backdrop-filter: none !important;
-          }
-
-          .print-modal-card {
-            position: static !important;
-            display: block !important;
-            width: 100% !important;
-            max-width: none !important;
-            height: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-            box-shadow: none !important;
-            border: none !important;
-            background: transparent !important;
-            border-radius: 0 !important;
-          }
-
-          #shipping-labels-printable-root {
-            display: block !important;
-            position: static !important;
-            width: 100% !important;
-            height: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-          }
-
-          .shipping-label-sticker {
-            display: block !important;
-            position: relative !important;
-            width: ${selectedConfig.widthMm} !important;
-            max-width: ${selectedConfig.widthMm} !important;
-            box-sizing: border-box !important;
-            margin: 0 auto !important;
-            padding: 0 !important;
-            background: #ffffff !important;
-            border: 2.5px solid #000000 !important;
-            page-break-before: auto !important;
-            page-break-after: always !important;
-            break-after: page !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-
-          .shipping-label-sticker:last-child {
-            page-break-after: auto !important;
-            break-after: auto !important;
-          }
-        }
-      ` }} />
-
       {/* Screen Backdrop & Centered Modal */}
       <div
         className="print-modal-backdrop fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-start p-2 sm:p-4 overflow-y-auto"

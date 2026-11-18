@@ -79,11 +79,11 @@ export default function OrderTracking() {
   // Status visual mapping & step tracker (Matches Admin Dropdown: Ordered, Processing, Packing, Shipped, Delivered)
   const getStatusStep = (status) => {
     const s = String(status || '').toLowerCase().trim();
-    if (s === 'delivered') return 5;
-    if (s === 'shipped') return 4;
-    if (s === 'packing') return 3;
-    if (s === 'processing') return 2;
-    if (s === 'ordered') return 1;
+    if (s === 'delivered' || s === 'completed') return 5;
+    if (s === 'shipped' || s === 'dispatched' || s === 'in transit') return 4;
+    if (s === 'packing' || s === 'packed') return 3;
+    if (s === 'processing' || s === 'verified' || s === 'preparing') return 2;
+    if (s === 'ordered' || s === 'pending' || s === 'paid') return 1;
     return 1; // Ordered / Pending
   };
 
@@ -91,6 +91,7 @@ export default function OrderTracking() {
     const s = String(status || '').toLowerCase().trim();
     switch (s) {
       case 'delivered':
+      case 'completed':
         return (
           <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -98,6 +99,8 @@ export default function OrderTracking() {
           </span>
         );
       case 'shipped':
+      case 'dispatched':
+      case 'in transit':
         return (
           <span className="bg-blue-50 text-blue-800 border border-blue-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
             <Truck className="w-3.5 h-3.5 text-blue-600" />
@@ -105,6 +108,7 @@ export default function OrderTracking() {
           </span>
         );
       case 'packing':
+      case 'packed':
         return (
           <span className="bg-purple-50 text-purple-800 border border-purple-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
             <Package className="w-3.5 h-3.5 text-purple-600" />
@@ -112,6 +116,8 @@ export default function OrderTracking() {
           </span>
         );
       case 'processing':
+      case 'verified':
+      case 'preparing':
         return (
           <span className="bg-amber-50 text-amber-800 border border-amber-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
             <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
@@ -119,6 +125,7 @@ export default function OrderTracking() {
           </span>
         );
       case 'cancelled':
+      case 'canceled':
         return (
           <span className="bg-rose-50 text-rose-800 border border-rose-300 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
             <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
@@ -444,7 +451,7 @@ export default function OrderTracking() {
                           const itemName = item.product_name || item.book_title || item.name || 'Competitive Exam Book';
                           const itemQty = parseInt(item.qty || item.quantity || 1, 10);
                           const itemPrice = parseFloat(item.price || 0);
-                          const itemImg = item.product_image || item.image;
+                          const itemImg = item.product_image || item.image || item.main_photo;
                           return (
                             <div key={idx} className="py-2.5 flex items-center justify-between gap-3">
                               <div className="flex items-center gap-3 min-w-0">

@@ -18,6 +18,14 @@ try {
     }
 } catch (\Throwable $e) {}
 
+// Auto-migrate: ensure order_status column exists in orders table
+try {
+    $colCheck = $pdo->query("SHOW COLUMNS FROM orders LIKE 'order_status'")->fetch();
+    if (!$colCheck) {
+        $pdo->exec("ALTER TABLE orders ADD COLUMN order_status VARCHAR(50) DEFAULT 'Ordered' AFTER status");
+    }
+} catch (\Throwable $e) {}
+
 // Auto-cleanup: permanently remove accidental dummy sync orders (Customer 9999999999 and dummy payment IDs)
 try {
     $dummyIds = [
@@ -3681,70 +3689,141 @@ if ($path === 'dashboard/stats') {
 // -------------------------------------------------------------
 // 7. ORDER HISTORY & TRACKING (Supports Order Code, Mobile Number, or Order ID)
 // -------------------------------------------------------------
-if (str_starts_with($path, 'order-history/orders') || $path === 'orders/track' || $path === 'tracking') {
-    $q = trim($_GET['query'] ?? $_GET['order_code'] ?? $_GET['phone'] ?? '');
+if (
+    str_starts_with($path, 'order-history') ||
+    str_starts_with($path, 'orders/track') ||
+    $path === 'tracking'
+) {
+    header('Content-Type: application/json');
+    $q = trim($_GET['query'] ?? $_GET['order_code'] ?? $_GET['phone'] ?? $_GET['code'] ?? '');
     if (empty($q)) {
-        echo json_encode(['success' => true, 'orders' => []]);
+        echo json_encode(['success' => true, 'count' => 0, 'orders' => []]);
         exit;
     }
 
-    $cleanPhone = preg_replace('/\D/', '', $q);
-    $upperCode = strtoupper($q);
-    $numericId = is_numeric($q) ? intval($q) : -1;
+    try {
+        $cleanDigits = preg_replace('/\D/', '', $q);
+        $upperCode = strtoupper($q);
 
-    $stmt = $pdo->prepare('
-        SELECT 
-            o.*, 
-            o.total AS total_amount,
-            c.name AS customer_name, 
-            c.phone AS customer_phone, 
-            c.email AS customer_email,
-            c.door_no,
-            c.address,
-            c.mandal,
-            c.district,
-            c.state,
-            c.pincode
-        FROM orders o
-        LEFT JOIN customers c ON c.id = o.customer_id
-        WHERE o.order_code = ? 
-           OR o.order_code LIKE ?
-           OR c.phone = ?
-           OR (? != "" AND c.phone LIKE ?)
-           OR o.id = ?
-        ORDER BY o.id DESC LIMIT 10
-    ');
-    $likeCode = '%' . $upperCode . '%';
-    $likePhone = '%' . $cleanPhone . '%';
-    $stmt->execute([
-        $upperCode,
-        $likeCode,
-        $cleanPhone ?: $q,
-        $cleanPhone,
-        $likePhone,
-        $numericId
-    ]);
-    $orders = $stmt->fetchAll();
+        $whereParts = [];
+        $params = [];
 
-    foreach ($orders as &$ord) {
-        $itemStmt = $pdo->prepare('
-            SELECT oi.*, p.name AS product_name, p.main_photo AS product_image
-            FROM order_items oi
-            LEFT JOIN products p ON p.id = oi.product_id
-            WHERE oi.order_id = ?
-        ');
-        $itemStmt->execute([$ord['id']]);
-        $items = $itemStmt->fetchAll();
-        $ord['items'] = $items;
-        $totalItemsCount = 0;
-        foreach ($items as $it) {
-            $totalItemsCount += intval($it['qty'] ?? 1);
+        // 1. Order Code match (exact or like)
+        $whereParts[] = 'o.order_code = ?';
+        $params[] = $upperCode;
+
+        $whereParts[] = 'o.order_code LIKE ?';
+        $params[] = '%' . $upperCode . '%';
+
+        // 2. Phone match if digits exist
+        if (!empty($cleanDigits)) {
+            $last10 = (strlen($cleanDigits) >= 10) ? substr($cleanDigits, -10) : $cleanDigits;
+
+            $whereParts[] = 'c.phone = ?';
+            $params[] = $q;
+
+            $whereParts[] = 'c.phone = ?';
+            $params[] = $cleanDigits;
+
+            $whereParts[] = 'c.phone LIKE ?';
+            $params[] = '%' . $last10 . '%';
+
+            $whereParts[] = 'c.phone LIKE ?';
+            $params[] = '%' . $cleanDigits . '%';
         }
-        $ord['total_items'] = $totalItemsCount ?: count($items);
-    }
 
-    echo json_encode(['success' => true, 'orders' => $orders]);
-    exit;
+        // 3. Numeric Order ID match (only if positive integer under max id)
+        if (ctype_digit($q) && strlen($q) <= 8) {
+            $whereParts[] = 'o.id = ?';
+            $params[] = intval($q);
+        }
+
+        // 4. Payment ID match
+        if (str_starts_with(strtolower($q), 'pay_')) {
+            $whereParts[] = 'o.razorpay_payment_id = ?';
+            $params[] = $q;
+        }
+
+        $whereClause = implode(' OR ', $whereParts);
+
+        $sql = "
+            SELECT 
+                o.id,
+                o.customer_id,
+                o.order_code,
+                o.subtotal,
+                o.shipping,
+                o.total,
+                o.total AS total_amount,
+                COALESCE(NULLIF(o.order_status, ''), o.status, 'Ordered') AS order_status,
+                o.status AS payment_status,
+                o.razorpay_payment_id,
+                o.created_at,
+                o.updated_at,
+                c.name AS customer_name,
+                c.phone AS customer_phone,
+                c.email AS customer_email,
+                c.door_no,
+                c.address,
+                c.mandal,
+                c.district,
+                c.state,
+                c.pincode
+            FROM orders o
+            LEFT JOIN customers c ON c.id = o.customer_id
+            WHERE {$whereClause}
+            ORDER BY o.id DESC
+            LIMIT 20
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($orders as &$ord) {
+            $itemStmt = $pdo->prepare('
+                SELECT 
+                    oi.id,
+                    oi.order_id,
+                    oi.product_id,
+                    COALESCE(NULLIF(oi.product_name, ""), p.name, "Competitive Exam Book") AS product_name,
+                    oi.price,
+                    oi.qty,
+                    oi.total,
+                    COALESCE(p.main_photo, "/images/ebook_logo.png") AS product_image,
+                    p.slug AS product_slug
+                FROM order_items oi
+                LEFT JOIN products p ON p.id = oi.product_id
+                WHERE oi.order_id = ?
+                ORDER BY oi.id ASC
+            ');
+            $itemStmt->execute([$ord['id']]);
+            $items = $itemStmt->fetchAll(PDO::FETCH_ASSOC);
+            $ord['items'] = $items;
+
+            $totalItemsCount = 0;
+            foreach ($items as $it) {
+                $totalItemsCount += intval($it['qty'] ?? 1);
+            }
+            $ord['total_items'] = $totalItemsCount ?: count($items);
+            $ord['payment_method'] = !empty($ord['razorpay_payment_id']) ? 'Paid via Razorpay' : 'Paid';
+        }
+
+        echo json_encode([
+            'success' => true,
+            'count'   => count($orders),
+            'orders'  => $orders
+        ]);
+        exit;
+    } catch (\Throwable $e) {
+        echo json_encode([
+            'success' => true,
+            'count'   => 0,
+            'orders'  => [],
+            'error'   => $e->getMessage()
+        ]);
+        exit;
+    }
 }
 
 // -------------------------------------------------------------

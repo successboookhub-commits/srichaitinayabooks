@@ -30,6 +30,7 @@ const PAPER_CONFIGS = {
     desc: 'Standard Full Sheet Dispatch Slip',
     pageSizeCss: 'A4 portrait',
     marginCss: '6mm',
+    heightMm: '284mm',
     widthMm: '194mm',
     previewMaxWidth: '194mm',
     isLarge: true,
@@ -41,6 +42,7 @@ const PAPER_CONFIGS = {
     desc: 'Official Legal Size (8.5" × 14")',
     pageSizeCss: 'legal portrait',
     marginCss: '6mm',
+    heightMm: '343mm',
     widthMm: '202mm',
     previewMaxWidth: '202mm',
     isLarge: true,
@@ -52,6 +54,7 @@ const PAPER_CONFIGS = {
     desc: 'Half A4 Sheet Dispatch Slip',
     pageSizeCss: 'A5 portrait',
     marginCss: '5mm',
+    heightMm: '199mm',
     widthMm: '138mm',
     previewMaxWidth: '138mm',
     isLarge: false,
@@ -61,8 +64,9 @@ const PAPER_CONFIGS = {
     name: '4" × 6" Thermal',
     dims: '100 × 150 mm',
     desc: 'Standard Courier Thermal Roll',
-    pageSizeCss: '100mm 150mm portrait',
+    pageSizeCss: '100mm 150mm',
     marginCss: '2mm',
+    heightMm: '145mm',
     widthMm: '96mm',
     previewMaxWidth: '96mm',
     isLarge: false,
@@ -72,8 +76,9 @@ const PAPER_CONFIGS = {
     name: '9 × 14 cm Sticker',
     dims: '90 × 140 mm',
     desc: 'Courier & India Post Sticker',
-    pageSizeCss: '90mm 140mm portrait',
+    pageSizeCss: '90mm 140mm',
     marginCss: '2mm',
+    heightMm: '135mm',
     widthMm: '86mm',
     previewMaxWidth: '86mm',
     isLarge: false,
@@ -85,6 +90,7 @@ const PAPER_CONFIGS = {
     desc: 'Quarter Sheet / 4-per-A4 Label',
     pageSizeCss: 'A4 portrait',
     marginCss: '5mm',
+    heightMm: '147mm',
     widthMm: '105mm',
     previewMaxWidth: '105mm',
     isLarge: false,
@@ -96,6 +102,7 @@ const PAPER_CONFIGS = {
     desc: 'Large Poster Sheet',
     pageSizeCss: 'A3 portrait',
     marginCss: '10mm',
+    heightMm: '399mm',
     widthMm: '275mm',
     previewMaxWidth: '275mm',
     isLarge: true,
@@ -142,18 +149,19 @@ export default function AdminOrderLabel({ orders, onClose }) {
       oldIframe.remove();
     }
 
-    // Collect all stylesheets from current document
-    const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
-      .map((link) => link.outerHTML)
+    // Collect all stylesheets (production <link> tags + dev-mode <style> tags)
+    const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+      .map((el) => el.outerHTML)
       .join('\n');
 
     const iframe = document.createElement('iframe');
     iframe.id = 'isolated-shipping-print-iframe';
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
+    iframe.style.left = '-10000px';
+    iframe.style.top = '0';
+    // Real size so the label can be measured before printing
+    iframe.style.width = '1400px';
+    iframe.style.height = '1000px';
     iframe.style.border = '0';
     iframe.style.visibility = 'hidden';
     document.body.appendChild(iframe);
@@ -188,14 +196,22 @@ export default function AdminOrderLabel({ orders, onClose }) {
               min-height: 0 !important;
               overflow: visible !important;
             }
+            #shipping-labels-printable-root > * {
+              margin: 0 !important;
+            }
+            /* Each sticker = exactly ONE physical sheet (fixed height, never splits) */
             .shipping-label-sticker {
               display: block !important;
               position: relative !important;
               width: ${selectedConfig.widthMm} !important;
               max-width: ${selectedConfig.widthMm} !important;
+              height: ${selectedConfig.heightMm} !important;
+              max-height: ${selectedConfig.heightMm} !important;
+              overflow: hidden !important;
               margin: 0 auto !important;
               background: #ffffff !important;
               border: 2.5px solid #000000 !important;
+              box-shadow: none !important;
               page-break-before: auto !important;
               page-break-after: always !important;
               break-after: page !important;
@@ -206,6 +222,11 @@ export default function AdminOrderLabel({ orders, onClose }) {
               page-break-after: auto !important;
               break-after: auto !important;
             }
+            .label-fit {
+              display: flex !important;
+              flex-direction: column !important;
+              transform-origin: top left !important;
+            }
             table {
               width: 100% !important;
               border-collapse: collapse !important;
@@ -213,22 +234,66 @@ export default function AdminOrderLabel({ orders, onClose }) {
           </style>
         </head>
         <body>
-          ${printableArea.innerHTML}
+          <div id="shipping-labels-printable-root">
+            ${printableArea.innerHTML}
+          </div>
         </body>
       </html>
     `);
     doc.close();
 
-    // Give iframe a moment to parse CSS before triggering print
-    setTimeout(() => {
-      try {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-      } catch (err) {
-        console.error('Iframe print error, falling back to window.print():', err);
-        window.print();
-      }
-    }, 300);
+    // Shrink each sheet's content (if needed) so TO + FROM + all its books fit on ONE sheet.
+    const fitLabelsToPage = () => {
+      const stickers = doc.querySelectorAll('.shipping-label-sticker');
+      stickers.forEach((sticker) => {
+        const inner = sticker.querySelector('.label-fit');
+        if (!inner) return;
+        const availH = sticker.clientHeight; // inside border
+        let scale = 1;
+        for (let i = 0; i < 6; i++) {
+          inner.style.width = `${100 / scale}%`;
+          inner.style.minHeight = '0px';
+          const neededH = inner.scrollHeight;
+          const next = Math.min(1, (availH - 2) / neededH);
+          if (Math.abs(next - scale) < 0.005) {
+            scale = next;
+            break;
+          }
+          scale = next;
+        }
+        inner.style.width = `${100 / scale}%`;
+        inner.style.minHeight = `${availH / scale}px`; // fill the sheet so footer sits at bottom
+        inner.style.transform = scale < 1 ? `scale(${scale})` : 'none';
+      });
+    };
+
+    const waitForStyles = () => {
+      const links = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
+      const pending = links
+        .filter((l) => !l.sheet)
+        .map((l) => new Promise((res) => {
+          l.addEventListener('load', res, { once: true });
+          l.addEventListener('error', res, { once: true });
+        }));
+      const fontsReady = doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve();
+      return Promise.race([
+        Promise.all([...pending, fontsReady]),
+        new Promise((res) => setTimeout(res, 2500)),
+      ]);
+    };
+
+    waitForStyles().then(() => {
+      setTimeout(() => {
+        try {
+          fitLabelsToPage();
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } catch (err) {
+          console.error('Iframe print error, falling back to window.print():', err);
+          window.print();
+        }
+      }, 150);
+    });
   };
 
   const modalContent = (
@@ -387,6 +452,7 @@ export default function AdminOrderLabel({ orders, onClose }) {
                       fontFamily: 'Arial, Helvetica, sans-serif',
                     }}
                   >
+                    <div className="label-fit flex flex-col flex-1">
                     {/* TOP HEADER */}
                     <div className={`border-b-[2px] border-black bg-white text-center ${isLarge ? 'py-3 px-4' : 'py-2 px-3'}`}>
                       <h1 className={`${isLarge ? 'text-[20px] sm:text-[22px]' : 'text-[16px]'} font-black uppercase tracking-wide text-black m-0 leading-tight`}>
@@ -547,6 +613,7 @@ export default function AdminOrderLabel({ orders, onClose }) {
                     {/* FOOTER (NO BARCODE AS REQUESTED) */}
                     <div className={`py-2 px-3 text-center ${isLarge ? 'text-[14px]' : 'text-[12.5px]'} font-bold text-black bg-white`}>
                       Thank you for your order 📦
+                    </div>
                     </div>
                   </div>
                 );

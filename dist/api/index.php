@@ -1693,20 +1693,23 @@ function buildOrderInvoiceHtmlString($order, $items, $size = 'a4') {
                 </div>
 
                 <!-- 3. FROM: SENDER -->
-                <div style='padding: 10px 12px; border-bottom: 1.5px solid #000;'>
-                    <div style='font-size: 12px; font-weight: 900; text-transform: uppercase; margin-bottom: 3px;'>
-                        FROM:
-                    </div>
-                    <div style='font-size: 14.5px; font-weight: 900; text-transform: uppercase; margin-bottom: 2px;'>
+                <div style='padding: 6px 12px; border-bottom: 1.5px solid #000;'>
+                    <table style='width: 100%; border-collapse: collapse; margin-bottom: 2px;'>
+                        <tr>
+                            <td style='font-size: 9.5px; font-weight: 900; text-transform: uppercase;'>FROM:</td>
+                            <td style='font-size: 9.5px; font-weight: 800; font-family: monospace; text-align: right;'>Postal ID: 1879696070</td>
+                        </tr>
+                    </table>
+                    <div style='font-size: 11px; font-weight: 900; text-transform: uppercase; margin-bottom: 1px;'>
                         SRI CHAITANYA BOOK CENTRE
                     </div>
-                    <div style='font-size: 12.5px; font-weight: 500; line-height: 1.4;'>
+                    <div style='font-size: 9.5px; font-weight: 500; line-height: 1.35;'>
                         Konark Theatre Ln, opposite ICICI ATM,<br>
                         Gaddiannaram, Madhura Puri Colony,<br>
                         Dilsukhnagar, Hyderabad,<br>
                         Telangana - 500060
                     </div>
-                    <div style='font-size: 13.5px; font-weight: 900; margin-top: 3px;'>
+                    <div style='font-size: 10px; font-weight: 900; margin-top: 2px;'>
                         Tel / Helpline: 09177110134
                     </div>
                 </div>
@@ -1993,27 +1996,28 @@ function createNativeInvoicePdf($order, $items, $savePath = null, $size = 'a4') 
 
             $stream .= "2 w {$cardLeftX} " . ($cardTopY - 220) . " m {$cardRightX} " . ($cardTopY - 220) . " l S\n";
 
-            // 3. FROM: SECTION
-            $stream .= "BT /F2 12 Tf 60 " . ($cardTopY - 236) . " Td (FROM:) Tj ET\n";
-            $stream .= "BT /F2 15 Tf 60 " . ($cardTopY - 254) . " Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
-            $stream .= "BT /F1 12.5 Tf 60 " . ($cardTopY - 271) . " Td (Konark Theatre Ln, opposite ICICI ATM,) Tj ET\n";
-            $stream .= "BT /F1 12.5 Tf 60 " . ($cardTopY - 287) . " Td (Gaddiannaram, Madhura Puri Colony,) Tj ET\n";
-            $stream .= "BT /F1 12.5 Tf 60 " . ($cardTopY - 303) . " Td (Dilsukhnagar, Hyderabad, Telangana - 500060) Tj ET\n";
-            $stream .= "BT /F2 13.5 Tf 60 " . ($cardTopY - 323) . " Td (TEL / HELPLINE: 09177110134) Tj ET\n";
-            $stream .= "2 w {$cardLeftX} " . ($cardTopY - 337) . " m {$cardRightX} " . ($cardTopY - 337) . " l S\n";
+            // 3. FROM: SECTION (Reduced font by ~30% with Postal ID)
+            $stream .= "BT /F2 9.5 Tf 60 " . ($cardTopY - 235) . " Td (FROM:) Tj ET\n";
+            $stream .= "BT /F2 9 Tf " . ($cardRightX - 145) . " " . ($cardTopY - 235) . " Td (Postal ID: 1879696070) Tj ET\n";
+            $stream .= "BT /F2 11 Tf 60 " . ($cardTopY - 249) . " Td (SRI CHAITANYA BOOK CENTRE) Tj ET\n";
+            $stream .= "BT /F1 9 Tf 60 " . ($cardTopY - 262) . " Td (Konark Theatre Ln, opposite ICICI ATM,) Tj ET\n";
+            $stream .= "BT /F1 9 Tf 60 " . ($cardTopY - 274) . " Td (Gaddiannaram, Madhura Puri Colony,) Tj ET\n";
+            $stream .= "BT /F1 9 Tf 60 " . ($cardTopY - 286) . " Td (Dilsukhnagar, Hyderabad, Telangana - 500060) Tj ET\n";
+            $stream .= "BT /F2 9.5 Tf 60 " . ($cardTopY - 301) . " Td (TEL / HELPLINE: 09177110134) Tj ET\n";
+            $stream .= "2 w {$cardLeftX} " . ($cardTopY - 313) . " m {$cardRightX} " . ($cardTopY - 313) . " l S\n";
 
             // 4. ORDER ID & PAYMENT STRIP
-            $stream .= "BT /F2 14 Tf 60 " . ($cardTopY - 359) . " Td (Order ID: {$sOrderCode}) Tj ET\n";
-            $stream .= "BT /F2 14 Tf " . ($cardRightX - 130) . " " . ($cardTopY - 359) . " Td (Payment: {$sPayment}) Tj ET\n";
-            $stream .= "2 w {$cardLeftX} " . ($cardTopY - 373) . " m {$cardRightX} " . ($cardTopY - 373) . " l S\n";
+            $stream .= "BT /F2 14 Tf 60 " . ($cardTopY - 335) . " Td (Order ID: {$sOrderCode}) Tj ET\n";
+            $stream .= "BT /F2 14 Tf " . ($cardRightX - 130) . " " . ($cardTopY - 335) . " Td (Payment: {$sPayment}) Tj ET\n";
+            $stream .= "2 w {$cardLeftX} " . ($cardTopY - 349) . " m {$cardRightX} " . ($cardTopY - 349) . " l S\n";
 
             // 5. ITEM DETAILS (FIRST 5 BOOKS)
-            $stream .= "BT /F2 12 Tf 60 " . ($cardTopY - 390) . " Td (ITEM DETAILS (Books 1 to {$endBookNo} of {$totalCount}):) Tj ET\n";
-            $stream .= "BT /F2 11.5 Tf 60 " . ($cardTopY - 407) . " Td (PRODUCT) Tj ET\n";
-            $stream .= "BT /F2 11.5 Tf " . ($cardRightX - 45) . " " . ($cardTopY - 407) . " Td (QTY) Tj ET\n";
-            $stream .= "1 w 60 " . ($cardTopY - 414) . " m " . ($cardRightX - 15) . " " . ($cardTopY - 414) . " l S\n";
+            $stream .= "BT /F2 12 Tf 60 " . ($cardTopY - 366) . " Td (ITEM DETAILS (Books 1 to {$endBookNo} of {$totalCount}):) Tj ET\n";
+            $stream .= "BT /F2 11.5 Tf 60 " . ($cardTopY - 383) . " Td (PRODUCT) Tj ET\n";
+            $stream .= "BT /F2 11.5 Tf " . ($cardRightX - 45) . " " . ($cardTopY - 383) . " Td (QTY) Tj ET\n";
+            $stream .= "1 w 60 " . ($cardTopY - 390) . " m " . ($cardRightX - 15) . " " . ($cardTopY - 390) . " l S\n";
 
-            $curBookY = $cardTopY - 435;
+            $curBookY = $cardTopY - 411;
             foreach ($chunkItems as $itemIdx => $it) {
                 $bookNum = $startBookNo + $itemIdx;
                 $rawTitle = $it['product_name'] ?? 'Competitive Examination Book';

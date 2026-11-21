@@ -492,20 +492,25 @@ export default function AdminOrderLabel({ orders, onClose }) {
                         </div>
 
                         {/* FROM: SENDER */}
-                        <div className={`border-b-[1.5px] border-black bg-white leading-snug ${isLarge ? 'p-4 text-[14px]' : 'p-3 text-[12.5px]'}`}>
-                          <div className={`${isLarge ? 'text-[13px]' : 'text-[11.5px]'} font-black uppercase text-slate-700 tracking-wider mb-1`}>
-                            FROM:
+                        <div className={`border-b-[1.5px] border-black bg-white leading-tight ${isLarge ? 'px-4 py-2.5 text-[10px]' : 'px-3 py-2 text-[9px]'}`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`${isLarge ? 'text-[10px]' : 'text-[9px]'} font-black uppercase text-slate-700 tracking-wider`}>
+                              FROM:
+                            </span>
+                            <span className={`${isLarge ? 'text-[10px]' : 'text-[9px]'} font-mono font-bold text-slate-800`}>
+                              Postal ID: 1879696070
+                            </span>
                           </div>
-                          <div className={`font-black ${isLarge ? 'text-[16.5px]' : 'text-[14.5px]'} uppercase text-black mb-0.5`}>
+                          <div className={`font-black ${isLarge ? 'text-[11.5px]' : 'text-[10.5px]'} uppercase text-black mb-0.5`}>
                             SRI CHAITANYA BOOK CENTRE
                           </div>
-                          <div className={`text-black ${isLarge ? 'text-[14px] leading-normal' : 'text-[12.5px] leading-snug'} font-medium`}>
+                          <div className={`text-black ${isLarge ? 'text-[10px] leading-tight' : 'text-[9px] leading-tight'} font-medium`}>
                             Konark Theatre Ln, opposite ICICI ATM,<br />
                             Gaddiannaram, Madhura Puri Colony,<br />
                             Dilsukhnagar, Hyderabad,<br />
                             Telangana - 500060
                           </div>
-                          <div className={`text-black ${isLarge ? 'text-[15.5px]' : 'text-[13.5px]'} font-black mt-1.5 flex items-center gap-1.5`}>
+                          <div className={`text-black ${isLarge ? 'text-[11px]' : 'text-[9.5px]'} font-black mt-1 flex items-center gap-1.5`}>
                             <span>📞</span>
                             <span className="font-mono font-black">09177110134</span>
                           </div>

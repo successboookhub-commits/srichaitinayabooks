@@ -307,7 +307,6 @@ export default function OrderTracking() {
               </div>
             ) : (
               orders.map((order) => {
-                const currentStep = getStatusStep(order.order_status);
                 return (
                   <div
                     key={order.id}
@@ -347,9 +346,9 @@ export default function OrderTracking() {
                       </div>
                     </div>
 
-                    {/* Visual 5-Step Tracking Timeline or Cancelled Notice */}
-                    <div className="p-5 sm:p-6 border-b border-slate-100 bg-slate-50/50">
-                      {String(order.order_status || '').toLowerCase() === 'cancelled' ? (
+                    {/* Cancelled Notice (if cancelled) */}
+                    {String(order.order_status || '').toLowerCase() === 'cancelled' && (
+                      <div className="p-4 sm:p-5 border-b border-slate-100 bg-rose-50/50">
                         <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-800">
                           <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
                           <div>
@@ -357,88 +356,8 @@ export default function OrderTracking() {
                             <p className="text-[11px] text-rose-600">This consignment was cancelled. For refund inquiries or questions, please contact our support team.</p>
                           </div>
                         </div>
-                      ) : (
-                        <div>
-                          <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                            <Truck className="w-3.5 h-3.5 text-red-600" />
-                            <span>Live Consignment & Dispatch Progress</span>
-                          </p>
-
-                          <div className="relative">
-                            {/* Connecting Background Line */}
-                            <div className="absolute top-4 left-4 right-4 sm:left-6 sm:right-6 h-1 bg-slate-200 rounded-full pointer-events-none" />
-                            
-                            {/* Active Filled Line */}
-                            <div
-                              className="absolute top-4 left-4 sm:left-6 h-1 bg-gradient-to-r from-red-600 to-emerald-600 rounded-full transition-all duration-500 pointer-events-none"
-                              style={{
-                                width: currentStep === 1 ? '10%' : currentStep === 2 ? '32%' : currentStep === 3 ? '55%' : currentStep === 4 ? '78%' : '98%'
-                              }}
-                            />
-
-                            {/* 5 Distinct Order Status Steps */}
-                            <div className="relative z-10 grid grid-cols-5 text-center">
-                              
-                              {/* Step 1: Ordered */}
-                              <div className="space-y-1">
-                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                                  currentStep >= 1 ? 'bg-red-600 text-white ring-4 ring-red-100' : 'bg-slate-200 text-slate-500'
-                                }`}>
-                                  ✓
-                                </div>
-                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Ordered</p>
-                                <p className="text-[9px] text-slate-400 hidden sm:block">Placed</p>
-                              </div>
-
-                              {/* Step 2: Processing */}
-                              <div className="space-y-1">
-                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                                  currentStep >= 2 ? 'bg-amber-600 text-white ring-4 ring-amber-100' : 'bg-slate-200 text-slate-500'
-                                }`}>
-                                  {currentStep > 2 ? '✓' : '2'}
-                                </div>
-                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Processing</p>
-                                <p className="text-[9px] text-slate-400 hidden sm:block">Verified</p>
-                              </div>
-
-                              {/* Step 3: Packing */}
-                              <div className="space-y-1">
-                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                                  currentStep >= 3 ? 'bg-purple-600 text-white ring-4 ring-purple-100' : 'bg-slate-200 text-slate-500'
-                                }`}>
-                                  {currentStep > 3 ? '✓' : '3'}
-                                </div>
-                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Packing</p>
-                                <p className="text-[9px] text-slate-400 hidden sm:block">Sealed</p>
-                              </div>
-
-                              {/* Step 4: Shipped */}
-                              <div className="space-y-1">
-                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                                  currentStep >= 4 ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-slate-200 text-slate-500'
-                                }`}>
-                                  {currentStep > 4 ? '✓' : '4'}
-                                </div>
-                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Shipped</p>
-                                <p className="text-[9px] text-slate-400 hidden sm:block">In Transit</p>
-                              </div>
-
-                              {/* Step 5: Delivered */}
-                              <div className="space-y-1">
-                                <div className={`w-8 h-8 rounded-full mx-auto flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                                  currentStep >= 5 ? 'bg-emerald-600 text-white ring-4 ring-emerald-100' : 'bg-slate-200 text-slate-500'
-                                }`}>
-                                  {currentStep >= 5 ? '✓' : '5'}
-                                </div>
-                                <p className="text-[10px] sm:text-xs font-black text-slate-900 leading-tight">Delivered</p>
-                                <p className="text-[9px] text-slate-400 hidden sm:block">Handover</p>
-                              </div>
-
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Book Items Preview */}
                     <div className="p-5 sm:p-6 space-y-3">
